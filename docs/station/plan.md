@@ -252,6 +252,10 @@ O mecanismo de autorização recebe uma ação estruturada:
 
 Ele retorna { decision: "allow" | "ask" | "deny", reason, matchedRule }. A implementação deve avaliar nesta ordem: bloqueios de segredo/fora da raiz, regra mais específica do projeto/path/tipo, regra do workflow, default da política. Qualquer ausência de evidência deve resultar em ask ou deny, nunca em permissão implícita.
 
+Contrato JSON V1 adotado para `policies.execution`: `default` opcional com `allow`, `ask` ou `deny` (ausente equivale a `ask`) e `rules`, uma lista opcional de regras com `decision` e pelo menos um seletor entre `kind`, `project`, `path`, `commandId`, `category` e `provider`. `kind` aceita `read`, `write` ou `command`; `path` é relativo, usa `/` e admite glob `**` entre segmentos. Campos desconhecidos, referências a projetos/comandos inexistentes ou decisões inválidas tornam `station validate` inválido e não podem resultar em allow. Entre regras correspondentes, vence a que tem mais seletores; empate usa a decisão mais restritiva (`deny`, depois `ask`, depois `allow`).
+
+O escopo do workflow continua sendo um limite independente: uma regra de policy não amplia `readPaths`, `writePaths` ou `allowedCommands`. Uma regra allow só libera ação dentro do escopo correspondente; write fora de `writePaths` é deny, e read/comando não listados usam ask/deny, nunca um default allow implícito. Sem regra específica, um item explicitamente listado pelo workflow é uma autorização declarada; fora disso aplica-se o default. `external-write` permanece deny na V1, mesmo se `externalChanges` contiver dados, porque não há executor de efeitos externos.
+
 Paths usados pela CLI devem ser canonicalizados antes da decisão, rejeitando traversal e links existentes que escapem dos limites. A CLI passa executável e argumentos como vetor para qualquer processo autorizado, sem shell. A validação não elimina condições de corrida do filesystem nem controla processos iniciados pelo host por fora.
 
 ### 6.2 Dados
@@ -264,6 +268,8 @@ Paths usados pela CLI devem ser canonicalizados antes da decisão, rejeitando tr
 - omissão ou redaction configurável de secret, bloqueando por padrão sua inclusão no pacote de contexto;
 - decisão ask para categoria nova/unknown;
 - distinção entre contexto preparado localmente e envio feito por um host externo. Sem hook do host, a Station só registra preparação, não confirma envio.
+
+Contrato JSON V1 adotado para `policies.data`: `default` opcional (ausente equivale a `ask`), `categories` opcional com decisões por categoria, `providers` opcional como lista de IDs e `rules` opcional com seletores `project`, `path` e/ou `category`, mais `decision`. Referências de projeto inexistentes e campos desconhecidos invalidam o manifesto. `secret` só aceita deny; categoria `unknown` não pode ser allow e fica ask por padrão. A regra correspondente mais específica precede a decisão da categoria e o default; empate usa deny > ask > allow. `providers` é apenas allowlist declarativa: não há adapter nem ação `data-send` permitida nesta V1.
 
 O núcleo inicial deve excluir arquivos `.env*` e detectar cabeçalhos PEM em arquivos que seriam adicionados ao contexto; o evento guarda somente tipo, path, linha e hash do trecho, nunca o valor. Não implementar heurística de tokens de alta entropia no primeiro núcleo sem avaliar seus falsos positivos/negativos. A lista pequena de padrões fica centralizada e coberta por testes.
 
@@ -488,6 +494,7 @@ Dependência: Fase 1.
 - Criar: internal/policy/decision.go, internal/policy/paths.go, internal/policy/commands.go, internal/policy/data.go, internal/policy/secret_patterns.go.
 - Criar: internal/audit/write.go.
 - Criar: internal/policy/decision_test.go, internal/policy/paths_test.go, internal/policy/commands_test.go, internal/policy/secrets_test.go, internal/audit/write_test.go.
+- Alterar: internal/cli/validate.go e internal/cli/parse_test.go para validar a forma/decisões das policies além do schema estrutural.
 
 **Interfaces:**
 
@@ -497,10 +504,11 @@ Dependência: Fase 1.
     scanData(path, content, category string, policy DataPolicy) ScanResult
     appendAudit(root string, event AuditEvent) (eventID, path string, err error)
 
-- [ ] Escrever testes para cada regra do foco de revisão: traversal, symlink externo, comando não declarado, ask, deny, segredo e repositório externo.
+- [ ] Escrever testes para cada regra do foco de revisão: traversal, symlink externo (incluindo symlink final com barra conforme advisory Go vigente), comando não declarado, ask, deny, segredo e repositório externo.
 - [ ] Rodar os testes e confirmar falhas por funções ausentes.
 - [ ] Implementar validação lexical de paths e fazer I/O da Station relativo a `os.Root` ancorado em workspace ou repo externo; rejeitar absoluto, `..`, symlink fora da raiz e qualquer escrita pela CLI na raiz externa. Não alegar isolamento de processos, mounts ou devices.
 - [ ] Implementar autorização por precedência e os três resultados allow/ask/deny; não usar booleano que confunda ask com allow.
+- [ ] Fazer `station validate` validar os contratos execution/data, referências de projeto/comando e regras secret/unknown antes de qualquer execução.
 - [ ] Implementar comando como { executable, args[] }, rejeitando string shell, argumentos não declarados e workflow sem permissão.
 - [ ] Implementar exclusão de `.env*` e detecção PEM redigida no pacote de contexto, retornando somente tipo/path/linha/hash; não implementar heurística ampla de token neste núcleo.
 - [ ] Implementar .station/audit.jsonl append-only, criando o diretório somente depois de uma decisão válida e nunca para manifestos inválidos.
