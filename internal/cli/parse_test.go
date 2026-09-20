@@ -171,7 +171,7 @@ func TestRunCLIWorkflowChildInheritsJSONFormat(t *testing.T) {
 
 	result := runCLI(context.Background(), []string{"workflow", "run", "build", "--format", "json"}, Dependencies{Stdout: &stdout, Stderr: &stderr})
 
-	if result.OK || result.Status != "blocked" || result.Code != string(CodePrerequisiteMissing) || result.ExitCode != 5 {
+	if result.OK || result.Status != "invalid" || result.Code != string(CodeInvalid) || result.ExitCode != 2 {
 		t.Fatalf("result = %#v", result)
 	}
 	var output Result
@@ -180,6 +180,21 @@ func TestRunCLIWorkflowChildInheritsJSONFormat(t *testing.T) {
 	}
 	if !reflect.DeepEqual(output, result) || stderr.Len() != 0 {
 		t.Fatalf("output = %#v, result = %#v, stderr = %q", output, result, stderr.String())
+	}
+}
+
+func TestRunCLIEmitsArgumentValidationErrorsAsJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	result := runCLI(context.Background(), []string{"workflow", "run", "--format", "json"}, Dependencies{Stdout: &stdout, Stderr: &stderr})
+	if result.OK || result.Status != "invalid" || result.ExitCode != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+	var output Result
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("stdout is not JSON: %q: %v", stdout.String(), err)
+	}
+	if stderr.Len() != 0 || output.ExitCode != result.ExitCode {
+		t.Fatalf("stdout=%q stderr=%q output=%#v", stdout.String(), stderr.String(), output)
 	}
 }
 

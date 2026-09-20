@@ -45,6 +45,7 @@ type Event struct {
 	Decision       Decision `json:"decision"`
 	RunID          string   `json:"runId,omitempty"`
 	Workflow       string   `json:"workflow,omitempty"`
+	CommandID      string   `json:"commandId,omitempty"`
 	Paths          []string `json:"paths,omitempty"`
 	Categories     []string `json:"categories,omitempty"`
 	Hashes         []string `json:"hashes,omitempty"`
@@ -152,6 +153,9 @@ func validateEvent(event Event) error {
 	}
 	if event.Workflow != "" && !validIdentifier(event.Workflow) {
 		return fmt.Errorf("invalid audit workflow ID")
+	}
+	if event.CommandID != "" && !validIdentifier(event.CommandID) || event.Kind == KindCommand && event.CommandID == "" {
+		return fmt.Errorf("invalid audit command ID")
 	}
 	if event.RelatedEventID != "" && !validEventID(event.RelatedEventID) {
 		return fmt.Errorf("invalid related audit event ID")

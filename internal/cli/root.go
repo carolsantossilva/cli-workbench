@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"station/internal/workflows"
 	"station/internal/workspace"
 )
 
@@ -21,11 +22,13 @@ type Dependencies struct {
 }
 
 type Result struct {
-	OK          bool                   `json:"ok"`
-	Status      string                 `json:"status"`
-	Code        string                 `json:"code"`
-	ExitCode    int                    `json:"exitCode"`
-	Diagnostics []workspace.Diagnostic `json:"diagnostics,omitempty"`
+	OK           bool                      `json:"ok"`
+	Status       string                    `json:"status"`
+	Code         string                    `json:"code"`
+	ExitCode     int                       `json:"exitCode"`
+	Diagnostics  []workspace.Diagnostic    `json:"diagnostics,omitempty"`
+	WorkflowRun  *WorkflowRunOutput        `json:"workflowRun,omitempty"`
+	Verification *workflows.WorkflowResult `json:"verification,omitempty"`
 }
 
 func runCLI(ctx context.Context, argv []string, deps Dependencies) Result {
@@ -57,7 +60,7 @@ func runCLI(ctx context.Context, argv []string, deps Dependencies) Result {
 	command.SetArgs(argv)
 	if err := command.ExecuteContext(ctx); err != nil {
 		result = failedResult(err)
-		if format == "json" && handled {
+		if format == "json" {
 			writeResultJSON(stdout, result)
 		} else {
 			fmt.Fprintln(stderr, err)
@@ -93,8 +96,8 @@ func newRootCommand(root string, format *string, result *Result, handled *bool) 
 	workflow.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		return validateFormat(*format)
 	}
-	workflow.AddCommand(unavailableCommand("run <workflow-id>", handled))
-	workflow.AddCommand(unavailableCommand("verify <workflow-id> <run-id>", handled))
+	workflow.AddCommand(newWorkflowRunCommand(root, format, result, handled))
+	workflow.AddCommand(newWorkflowVerifyCommand(root, format, result, handled))
 	command.AddCommand(workflow)
 	return command
 }

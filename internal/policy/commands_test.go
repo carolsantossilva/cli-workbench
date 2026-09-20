@@ -40,6 +40,18 @@ func TestAuthorizeCommandDeniesUnknownAndShellExecutable(t *testing.T) {
 	}
 }
 
+func TestAuthorizeCommandDeniesShellLaunchedThroughEnvWrapper(t *testing.T) {
+	for _, args := range [][]string{{"sh", "-c", "touch should-not-run"}, {"-u", "PATH", "bash", "-c", "touch should-not-run"}, {"-S", "'zsh' -c touch"}} {
+		manifest := policyFixture()
+		manifest.Commands[0].Executable = "env"
+		manifest.Commands[0].Args = args
+		decision, _ := authorizeCommand("web.test", "build", manifest)
+		if decision.Outcome != Deny {
+			t.Errorf("env %q decision = %q, want deny", args, decision.Outcome)
+		}
+	}
+}
+
 func TestAuthorizeBindsCommandPolicyToDeclaredProject(t *testing.T) {
 	for _, projectID := range []string{"other", ""} {
 		t.Run("project-"+projectID, func(t *testing.T) {

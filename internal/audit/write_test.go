@@ -100,6 +100,24 @@ func TestAppendAddsJSONLLinesWithoutRewritingPriorEvents(t *testing.T) {
 	}
 }
 
+func TestAppendPersistsDeclaredCommandIDForCommandEvent(t *testing.T) {
+	root := t.TempDir()
+	_, auditPath, err := Append(root, Event{
+		Kind: KindCommand, Decision: DecisionAllow, RunID: "e2a62b62-17a3-4fab-a68d-f8b710d0e56e",
+		Workflow: "build", CommandID: "server.test", Paths: []string{"apps/server"},
+	})
+	if err != nil {
+		t.Fatalf("Append(command) error = %v", err)
+	}
+	data, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte(`"commandId":"server.test"`)) {
+		t.Fatalf("audit record omitted command ID: %s", data)
+	}
+}
+
 func TestAppendRejectsInvalidOrUndecidedEventWithoutCreatingAuditDirectory(t *testing.T) {
 	rawSecret := "fixture-secret-value-must-not-appear"
 	for _, test := range []struct {
