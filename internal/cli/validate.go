@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"station/internal/policy"
 	"station/internal/workspace"
 )
 
@@ -28,6 +29,7 @@ func newValidateCommand(root string, format *string, result *Result, handled *bo
 				}
 			}
 			diagnostics := workspace.ValidateWorkspace(manifest, root)
+			diagnostics = append(diagnostics, policy.ValidateManifestPolicies(manifest)...)
 			if len(diagnostics) > 0 {
 				return &Error{
 					Code:        CodeInvalid,

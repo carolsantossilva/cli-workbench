@@ -51,6 +51,59 @@ func TestRunCLIValidatesManifestWithoutWriting(t *testing.T) {
 	}
 }
 
+func TestRunCLIRejectsInvalidExecutionPolicy(t *testing.T) {
+	root := writeValidWorkspace(t)
+	manifestPath := filepath.Join(root, "workspace.json")
+	content, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(content), `"execution": {}`, `"execution": {"default":"maybe"}`, 1)
+	if updated == string(content) {
+		t.Fatal("fixture did not contain the expected empty execution policy")
+	}
+	if err := os.WriteFile(manifestPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	result := runCLI(context.Background(), []string{"validate", "--format", "json"}, Dependencies{Root: root, Stdout: &stdout, Stderr: &stderr})
+	if result.OK || result.Status != "invalid" || result.ExitCode != 2 {
+		t.Fatalf("result = %#v, want invalid policy", result)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Path != "/policies/execution" {
+		t.Fatalf("diagnostics = %#v, want execution policy path", result.Diagnostics)
+	}
+	if stderr.Len() != 0 || !strings.Contains(stdout.String(), "execution") {
+		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunCLIRejectsSecretAllowInDataPolicy(t *testing.T) {
+	root := writeValidWorkspace(t)
+	manifestPath := filepath.Join(root, "workspace.json")
+	content, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(content), `"data": {}`, `"data": {"categories":{"secret":"allow"}}`, 1)
+	if updated == string(content) {
+		t.Fatal("fixture did not contain the expected empty data policy")
+	}
+	if err := os.WriteFile(manifestPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stderr bytes.Buffer
+	result := runCLI(context.Background(), []string{"validate"}, Dependencies{Root: root, Stderr: &stderr})
+	if result.OK || result.Status != "invalid" || result.ExitCode != 2 {
+		t.Fatalf("result = %#v, want invalid data policy", result)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Path != "/policies/data" {
+		t.Fatalf("diagnostics = %#v, want data policy path", result.Diagnostics)
+	}
+}
+
 func TestRunCLIRejectsUnknownCommand(t *testing.T) {
 	var stderr bytes.Buffer
 	result := runCLI(context.Background(), []string{"unknown"}, Dependencies{Stderr: &stderr})
