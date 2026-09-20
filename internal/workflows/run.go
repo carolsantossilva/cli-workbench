@@ -430,7 +430,7 @@ func auditSnapshot(entries []SnapshotEntry, config Configuration) ([]string, []s
 	}
 	values := make([]pathHash, 0, len(entries))
 	for _, entry := range entries {
-		if !entry.Exists || entry.SHA256 == "" || !matchesAnySnapshotPattern(declared, entry.Path) {
+		if !entry.Exists || entry.SHA256 == "" || !matchesDeclaredSnapshotPath(declared, entry.Path) {
 			continue
 		}
 		values = append(values, pathHash{path: entry.Path, hash: entry.SHA256})

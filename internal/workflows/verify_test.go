@@ -65,6 +65,43 @@ func TestVerifyWorkflowRejectsMissingDeclaredOutputWithoutCompletingRun(t *testi
 	}
 }
 
+func TestVerifyWorkflowAcceptsLiteralDirectoryReadPathWithPreparedHash(t *testing.T) {
+	root := t.TempDir()
+	declaredPath := "apps/web/src/main.go"
+	declaredContent := []byte("package web\n")
+	writeTestFile(t, root, declaredPath, declaredContent)
+	runID := prepareVerificationRunWithReadPaths(t, root, []string{"apps/web", "docs/station/workflows/brainstorm.md"})
+	writeTestFile(t, root, "docs/station/brief.md", []byte("verified output\n"))
+
+	result, err := VerifyWorkflow(root, "brainstorm", runID)
+	if err != nil {
+		var workflowErr *WorkflowError
+		if errors.As(err, &workflowErr) && workflowErr.Code == FailureInvalid {
+			t.Fatalf("VerifyWorkflow() rejected a valid literal directory read path with FailureInvalid: %v", err)
+		}
+		t.Fatalf("VerifyWorkflow() error = %v", err)
+	}
+	if result.Status != "completed" {
+		t.Fatalf("VerifyWorkflow() status = %q, want completed", result.Status)
+	}
+
+	_, records := readVerificationAudit(t, root)
+	if len(records) != 2 || records[0].Event.Kind != audit.KindPrepared || records[1].Event.Kind != audit.KindCompleted {
+		t.Fatalf("audit records = %#v, want prepared + completed", records)
+	}
+	wantHashBytes := sha256.Sum256(declaredContent)
+	wantHash := hex.EncodeToString(wantHashBytes[:])
+	for index, path := range records[0].Event.Paths {
+		if path == declaredPath {
+			if index >= len(records[0].Event.Hashes) || records[0].Event.Hashes[index] != wantHash {
+				t.Fatalf("prepared audit hash for %q = %#v, want %s", declaredPath, records[0].Event.Hashes, wantHash)
+			}
+			return
+		}
+	}
+	t.Fatalf("prepared audit paths = %#v, want declared directory descendant %q", records[0].Event.Paths, declaredPath)
+}
+
 func TestVerifyWorkflowRejectsAlteredDeclaredSnapshotHashWithoutCompletingRun(t *testing.T) {
 	root := t.TempDir()
 	declaredPath := "docs/station/idea.md"
@@ -362,6 +399,10 @@ func prepareVerificationFixture(t *testing.T) (string, string) {
 }
 
 func prepareVerificationRun(t *testing.T, root string) string {
+	return prepareVerificationRunWithReadPaths(t, root, []string{"docs/station/**"})
+}
+
+func prepareVerificationRunWithReadPaths(t *testing.T, root string, readPaths []string) string {
 	t.Helper()
 	manifest := workflowRunFixture(nil)
 	brainstorm := manifest.Workflows["brainstorm"]
@@ -369,6 +410,7 @@ func prepareVerificationRun(t *testing.T, root string) string {
 	brainstorm.AllowedSkills = []string{}
 	brainstorm.AllowedCommands = []string{}
 	brainstorm.Inputs = []string{}
+	brainstorm.ReadPaths = append([]string(nil), readPaths...)
 	brainstorm.Summaries = []string{}
 	manifest.Workflows["brainstorm"] = brainstorm
 	review := brainstorm

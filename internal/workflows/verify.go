@@ -237,7 +237,7 @@ func snapshotHashesMatchPreparedEvent(snapshot Snapshot, config Configuration, p
 
 	declaredPaths := workflowSnapshotPaths(config)
 	for _, entry := range snapshot.Entries {
-		if entry.SHA256 != "" && !matchesAnySnapshotPattern(declaredPaths, entry.Path) {
+		if entry.SHA256 != "" && !matchesDeclaredSnapshotPath(declaredPaths, entry.Path) {
 			return false
 		}
 	}
