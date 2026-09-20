@@ -49,6 +49,15 @@ func TestScanDataUsesAskForUnknownCategory(t *testing.T) {
 	}
 }
 
+func TestScanDataDoesNotAllowUnrecognizedCategoryFromUnparsedPolicy(t *testing.T) {
+	result := ScanData("docs/notes.md", "ordinary text", "accounting", DataPolicy{
+		Rules: []DataRule{{Category: "accounting", Decision: Allow}},
+	})
+	if result.Decision.Outcome != Ask {
+		t.Fatalf("unrecognized category with unparsed allow rule = %q, want ask", result.Decision.Outcome)
+	}
+}
+
 func TestParseDataPolicyValidatesKnownCategoriesAndProviderList(t *testing.T) {
 	policy, err := ParseDataPolicy(map[string]any{
 		"default":    "ask",
