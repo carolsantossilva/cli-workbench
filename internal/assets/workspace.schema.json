@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "station://workspace.schema.json",
+  "title": "Station workspace manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "workspace", "projects", "commands", "policies", "workflows", "externalRepositories"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "const": "monorepo" }
+      }
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path", "kind", "language"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["mobile", "web", "server", "shared"] },
+          "language": { "enum": ["typescript", "go"] }
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "category", "executable", "args", "project", "timeoutSeconds"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "category": { "enum": ["dev", "test", "lint", "build", "diagnostics"] },
+          "executable": { "type": "string", "minLength": 1 },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "project": { "type": "string", "minLength": 1 },
+          "timeoutSeconds": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["execution", "data", "externalChanges"],
+      "properties": {
+        "execution": { "type": "object" },
+        "data": { "type": "object" },
+        "externalChanges": { "type": "object" }
+      }
+    },
+    "workflows": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "requiredSkills": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "allowedSkills": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "allowedCommands": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "readPaths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "writePaths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "inputs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "outputs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "summaries": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "handoff": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "externalRepositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path", "readOnly", "allowedReadPaths"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "readOnly": { "type": "boolean" },
+          "allowedReadPaths": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "metadata": { "type": "object" }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "workspace": { "id": "", "kind": "monorepo" },
+  "projects": [],
+  "commands": [],
+  "policies": { "execution": {}, "data": {}, "externalChanges": {} },
+  "workflows": {},
+  "externalRepositories": []
+}

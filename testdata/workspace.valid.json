@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "workspace": { "id": "sample-station", "kind": "monorepo" },
+  "projects": [
+    { "id": "mobile", "path": "apps/mobile", "kind": "mobile", "language": "typescript" },
+    { "id": "web", "path": "apps/web", "kind": "web", "language": "typescript" },
+    { "id": "server", "path": "apps/server", "kind": "server", "language": "go" }
+  ],
+  "commands": [],
+  "policies": { "execution": {}, "data": {}, "externalChanges": {} },
+  "workflows": {},
+  "externalRepositories": []
+}
