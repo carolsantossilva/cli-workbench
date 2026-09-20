@@ -434,7 +434,7 @@ Este plano não cria telas, entidades, fluxos, contrato de API, backlog ou espec
 
 ## 12. Fases de implementação, dependências e conclusão observável
 
-### Fase 0 — Pesquisa de implementação, baseline e isolamento
+### Task 0: Fase 0 — Pesquisa de implementação, baseline e isolamento
 
 Dependência: nenhuma.
 
@@ -449,7 +449,7 @@ Dependência: nenhuma.
 
 **Critério de conclusão:** pesquisa datada foi atualizada para decisões técnicas mutáveis; Git/worktree local é verificável; o commit-base conserva o design e plano existentes; nenhum efeito fora do escopo local ocorreu.
 
-### Fase 1 — Pacote CLI mínimo e contrato de schema
+### Task 1: Fase 1 — Pacote CLI mínimo e contrato de schema
 
 Dependência: Fase 0.
 
@@ -479,7 +479,7 @@ Dependência: Fase 0.
 
 **Critério de conclusão:** o binário `station validate` valida fixture válido, rejeita fixtures inválidos com diagnóstico localizado e nenhum comando de projeto é executado.
 
-### Fase 2 — Motor de políticas, caminhos, comandos e auditoria
+### Task 2: Fase 2 — Motor de políticas, caminhos, comandos e auditoria
 
 Dependência: Fase 1.
 
@@ -508,7 +508,7 @@ Dependência: Fase 1.
 
 **Critério de conclusão:** operações próprias da CLI e comandos iniciados por ela recebem decisão explícita; nenhuma operação negada é iniciada pela CLI. Writes feitos diretamente por um host externo não são prevenidos, mas a diferença de snapshot é reportada quando observável.
 
-### Fase 3 — Workflows, contexto e handoffs
+### Task 3: Fase 3 — Workflows, contexto e handoffs
 
 Dependência: Fases 1 e 2.
 
@@ -536,7 +536,7 @@ Dependência: Fases 1 e 2.
 
 **Critério de conclusão:** cada workflow expõe instrução versionada, contrato verificável e handoff mínimo; o CLI não declara conclusão com output ausente e sinaliza writes observáveis fora da política, sem alegar bloqueio de ações do host.
 
-### Fase 4 — Modos new/existing e monorepo
+### Task 4: Fase 4 — Modos new/existing e monorepo
 
 Dependência: Fases 1–3.
 
@@ -564,7 +564,7 @@ Dependência: Fases 1–3.
 
 **Critério de conclusão:** um workspace vazio recebe scaffold contratual mínimo e instruções/skills descobríveis por Codex; um workspace existente é analisado sem destruição; nenhum app de tarefas é criado.
 
-### Fase 5 — Verificação completa e documentação operacional
+### Task 5: Fase 5 — Verificação completa e documentação operacional
 
 Dependência: Fases 1–4.
 
