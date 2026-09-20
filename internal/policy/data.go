@@ -53,8 +53,16 @@ func scanData(path, content, category string, policy DataPolicy) ScanResult {
 		return ScanResult{Decision: decision(Deny, "PEM material is excluded from context", "secret-block"), Findings: findings}
 	}
 	if !knownDataCategory(category) {
-		if rule, ok := matchingDataRule(path, category, policy); ok && rule.Decision == Deny {
-			return ScanResult{Decision: decision(Deny, "matched explicit deny for unknown data", "data.rules."+strconv.Itoa(rule.Index))}
+		if rule, ok := matchingDataRule(path, category, policy); ok {
+			ruleID := "data.rules." + strconv.Itoa(rule.Index)
+			switch rule.Decision {
+			case Deny:
+				return ScanResult{Decision: decision(Deny, "matched explicit deny for unknown data", ruleID)}
+			case Ask:
+				return ScanResult{Decision: decision(Ask, "matched explicit ask for unknown data", ruleID)}
+			default:
+				return ScanResult{Decision: decision(Ask, "unknown data must be reviewed and cannot be allowed", ruleID)}
+			}
 		}
 		return ScanResult{Decision: decision(Ask, "data category is unknown", "data.default")}
 	}

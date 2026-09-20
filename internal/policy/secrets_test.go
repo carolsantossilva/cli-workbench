@@ -58,6 +58,19 @@ func TestScanDataDoesNotAllowUnrecognizedCategoryFromUnparsedPolicy(t *testing.T
 	}
 }
 
+func TestScanDataPreservesMatchedUnknownCategoryRule(t *testing.T) {
+	policy, err := ParseDataPolicy(map[string]any{
+		"rules": []any{map[string]any{"category": "unknown", "decision": "ask"}},
+	})
+	if err != nil {
+		t.Fatalf("ParseDataPolicy() error = %v", err)
+	}
+	result := ScanData("docs/notes.md", "ordinary text", "unknown", policy)
+	if result.Decision.Outcome != Ask || result.Decision.MatchedRule != "data.rules.0" {
+		t.Fatalf("decision = %#v, want ask from the explicit unknown-category rule", result.Decision)
+	}
+}
+
 func TestParseDataPolicyValidatesKnownCategoriesAndProviderList(t *testing.T) {
 	policy, err := ParseDataPolicy(map[string]any{
 		"default":    "ask",
