@@ -68,14 +68,14 @@ The generated `workflows.build` object starts with this scope (excerpt from `wor
   "allowedCommands": [],
   "readPaths": ["docs/station/**"],
   "writePaths": ["docs/station/plan.md"],
-  "inputs": ["docs/station/design.md", "docs/station/plan.md"],
+  "inputs": ["docs/station/design.md"],
   "outputs": ["docs/station/plan.md"],
   "summaries": [],
   "handoff": "docs/station/plan.md + paths alterados + design.md"
 }
 ```
 
-Thus the initial build workflow can read only under `docs/station/` and write only its plan artifact—not application source. After an approved design and verification policy explicitly authorize a broader scope, make the smallest necessary edits to that workflow's `readPaths`, `writePaths`, and, if needed, `allowedCommands`; every command ID must also have a matching entry in top-level `commands`. Then run `station validate`. Validation checks schema, paths, references, and policy structure; it does not attest that design approval happened or sandbox tools outside Station.
+Thus the first build run reads the approved design and writes its plan artifact; it cannot read or write application source. After the plan itself is approved, add it to `inputs`, then make the smallest necessary changes to `readPaths`, `writePaths`, and, if needed, `allowedCommands`; each command ID must also have a matching top-level `commands` entry. Run `station validate` before the implementation run. Validation checks schema, paths, references, and policy structure; it does not attest that design/plan approval happened or sandbox tools outside Station.
 
 ## Inspection and limits
 

@@ -39,7 +39,7 @@ var workflowStages = []struct {
 	{id: "brainstorm", inputs: []string{"docs/station/idea.md"}, output: "docs/station/brief.md"},
 	{id: "grill-me", inputs: []string{"docs/station/brief.md"}, output: "docs/station/decisions.md"},
 	{id: "design", inputs: []string{"docs/station/brief.md", "docs/station/decisions.md"}, output: "docs/station/design.md"},
-	{id: "build", inputs: []string{"docs/station/design.md", "docs/station/plan.md"}, output: "docs/station/plan.md"},
+	{id: "build", inputs: []string{"docs/station/design.md"}, output: "docs/station/plan.md"},
 	{id: "review", inputs: []string{"docs/station/decisions.md", "docs/station/design.md", "docs/station/plan.md"}, output: "docs/station/decisions.md"},
 }
 

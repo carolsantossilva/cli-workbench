@@ -85,7 +85,7 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 		"brainstorm": {inputs: []string{"docs/station/idea.md"}, output: "docs/station/brief.md", handoff: "docs/station/brief.md"},
 		"grill-me":   {inputs: []string{"docs/station/brief.md"}, output: "docs/station/decisions.md", handoff: "docs/station/decisions.md"},
 		"design":     {inputs: []string{"docs/station/brief.md", "docs/station/decisions.md"}, output: "docs/station/design.md", handoff: "docs/station/design.md"},
-		"build":      {inputs: []string{"docs/station/design.md", "docs/station/plan.md"}, output: "docs/station/plan.md", handoff: "docs/station/plan.md + paths alterados + design.md"},
+		"build":      {inputs: []string{"docs/station/design.md"}, output: "docs/station/plan.md", handoff: "docs/station/plan.md + paths alterados + design.md"},
 		"review":     {inputs: []string{"docs/station/decisions.md", "docs/station/design.md", "docs/station/plan.md"}, output: "docs/station/decisions.md", handoff: "snapshot/diff + testes + decisions.md"},
 	}
 	wantWorkflowIDs := []string{"brainstorm", "build", "design", "grill-me", "review"}
@@ -157,6 +157,31 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 	}
 	if _, err := os.Stat(trapMarker); !os.IsNotExist(err) {
 		t.Fatalf("station new invoked an external generator or command: %v", err)
+	}
+}
+
+func TestNewWorkspaceCanPrepareInitialBuildFromApprovedDesign(t *testing.T) {
+	root := t.TempDir()
+	created := cli.Run(context.Background(), []string{"new", "generic workflow fixture"}, cli.Dependencies{Root: root})
+	if !created.OK {
+		t.Fatalf("station new failed: %#v", created)
+	}
+	designPath := filepath.Join(root, "docs", "station", "design.md")
+	if err := os.WriteFile(designPath, []byte("# Approved design fixture\n"), 0o600); err != nil {
+		t.Fatalf("write approved design fixture: %v", err)
+	}
+
+	prepared := cli.Run(context.Background(), []string{"workflow", "run", "build", "--format", "json"}, cli.Dependencies{Root: root})
+	if !prepared.OK || prepared.Status != "prepared" || prepared.WorkflowRun == nil {
+		t.Fatalf("initial build workflow could not be prepared from its approved design: %#v", prepared)
+	}
+	inputs := prepared.WorkflowRun.Context.Inputs
+	if len(inputs) != 1 || inputs[0].Path != "docs/station/design.md" {
+		t.Fatalf("initial build inputs = %#v, want only the existing approved design", inputs)
+	}
+	outputs := prepared.WorkflowRun.Context.ExpectedOutputs
+	if len(outputs) != 1 || outputs[0].Path != "docs/station/plan.md" || outputs[0].Exists || outputs[0].Status != "pending" {
+		t.Fatalf("initial build expected outputs = %#v, want a pending plan artifact", outputs)
 	}
 }
 
