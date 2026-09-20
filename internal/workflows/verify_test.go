@@ -65,6 +65,48 @@ func TestVerifyWorkflowRejectsMissingDeclaredOutputWithoutCompletingRun(t *testi
 	}
 }
 
+func TestVerifyWorkflowRejectsAlteredDeclaredSnapshotHashWithoutCompletingRun(t *testing.T) {
+	root := t.TempDir()
+	declaredPath := "docs/station/idea.md"
+	writeTestFile(t, root, declaredPath, []byte("declared read input\n"))
+	runID := prepareVerificationRun(t, root)
+
+	state, err := readRunState(root, runID)
+	if err != nil {
+		t.Fatalf("read prepared run state: %v", err)
+	}
+	found := false
+	for index := range state.Snapshot.Entries {
+		if state.Snapshot.Entries[index].Path == declaredPath {
+			if state.Snapshot.Entries[index].SHA256 == "" {
+				t.Fatalf("prepared declared entry %q has no content hash", declaredPath)
+			}
+			state.Snapshot.Entries[index].SHA256 = ""
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("prepared snapshot omits declared read path %q", declaredPath)
+	}
+	stateBytes, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("encode altered run state: %v", err)
+	}
+	statePath := filepath.Join(root, ".station", "runs", runID+".json")
+	if err := os.WriteFile(statePath, stateBytes, 0o600); err != nil {
+		t.Fatalf("persist altered run state: %v", err)
+	}
+	writeTestFile(t, root, "docs/station/brief.md", []byte("verified output\n"))
+
+	_, err = VerifyWorkflow(root, "brainstorm", runID)
+	assertWorkflowFailureCode(t, err, FailureInvalid)
+	_, records := readVerificationAudit(t, root)
+	if len(records) != 1 || records[0].Event.Kind != audit.KindPrepared {
+		t.Fatalf("audit after altered snapshot rejection = %#v, want only prepared event", records)
+	}
+}
+
 func TestVerifyWorkflowRejectsMismatchedWorkflowIdentity(t *testing.T) {
 	root, runID := prepareVerificationFixture(t)
 

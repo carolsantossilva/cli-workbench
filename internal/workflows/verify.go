@@ -96,6 +96,9 @@ func VerifyWorkflow(root, workflowID, runID string) (WorkflowResult, error) {
 	if prepared == nil {
 		return WorkflowResult{}, workflowFailure(FailurePrerequisiteMissing, ".station/audit.jsonl", "prepared workflow audit event is missing")
 	}
+	if !snapshotHashesMatchPreparedEvent(state.Snapshot, resolved.Configuration, prepared.Event) {
+		return WorkflowResult{}, workflowFailure(FailureInvalid, ".station/runs", "prepared workflow snapshot hashes do not match prepared audit metadata")
+	}
 
 	paths := workflowSnapshotPaths(resolved.Configuration)
 	currentSnapshot, err := snapshotWorkspace(absoluteRoot, paths)
@@ -220,6 +223,33 @@ func validSnapshotEntries(entries []SnapshotEntry) bool {
 				return false
 			}
 		} else if entry.SHA256 != "" || entry.Bytes != 0 || !entry.ModifiedAt.IsZero() {
+			return false
+		}
+	}
+	return true
+}
+
+func snapshotHashesMatchPreparedEvent(snapshot Snapshot, config Configuration, prepared audit.Event) bool {
+	expectedPaths, expectedHashes := auditSnapshot(snapshot.Entries, config)
+	if !sameOrderedStrings(expectedPaths, prepared.Paths) || !sameOrderedStrings(expectedHashes, prepared.Hashes) {
+		return false
+	}
+
+	declaredPaths := workflowSnapshotPaths(config)
+	for _, entry := range snapshot.Entries {
+		if entry.SHA256 != "" && !matchesAnySnapshotPattern(declaredPaths, entry.Path) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameOrderedStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
 			return false
 		}
 	}
