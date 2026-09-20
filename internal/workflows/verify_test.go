@@ -88,17 +88,33 @@ func TestVerifyWorkflowRejectsInvalidRunIDWithoutCreatingState(t *testing.T) {
 
 func TestVerifyWorkflowReportsObservableChangesOutsideWritePaths(t *testing.T) {
 	root := t.TempDir()
-	writeTestFile(t, root, "apps/web/notes.md", []byte("baseline\n"))
+	path := "apps/web/notes.md"
+	writeTestFile(t, root, path, []byte("old note\n"))
 	runID := prepareVerificationRun(t, root)
+	state, err := readRunState(root, runID)
+	if err != nil {
+		t.Fatalf("read prepared run state: %v", err)
+	}
+	entry, ok := snapshotEntryMap(state.Snapshot.Entries)[path]
+	if !ok || entry.SHA256 != "" || entry.Bytes != int64(len("old note\n")) || entry.ModifiedAt.IsZero() {
+		t.Fatalf("out-of-scope baseline entry = %#v, want metadata and no content hash", entry)
+	}
 	writeTestFile(t, root, "docs/station/brief.md", []byte("verified brief\n"))
-	writeTestFile(t, root, "apps/web/notes.md", []byte("changed outside workflow scope\n"))
+	writeTestFile(t, root, path, []byte("new note\n"))
+	changedAt := time.Now().Add(2 * time.Hour)
+	if err := os.Chtimes(filepath.Join(root, filepath.FromSlash(path)), changedAt, changedAt); err != nil {
+		t.Fatalf("set changed out-of-scope mtime: %v", err)
+	}
 
 	result, err := VerifyWorkflow(root, "brainstorm", runID)
 	if err != nil {
 		t.Fatalf("VerifyWorkflow() error = %v", err)
 	}
-	if len(result.OutOfScopeChanges) != 1 || result.OutOfScopeChanges[0] != "apps/web/notes.md" {
-		t.Fatalf("out-of-scope changes = %#v, want apps/web/notes.md", result.OutOfScopeChanges)
+	if len(result.OutOfScopeChanges) != 1 || result.OutOfScopeChanges[0] != path {
+		t.Fatalf("out-of-scope changes = %#v, want %s", result.OutOfScopeChanges, path)
+	}
+	if !strings.Contains(strings.Join(result.Warnings, " "), "Git path-name evidence may not distinguish edits to paths already changed at preparation") {
+		t.Fatalf("verification warnings omit the filesystem observability limitation: %#v", result.Warnings)
 	}
 }
 

@@ -107,10 +107,11 @@ func VerifyWorkflow(root, workflowID, runID string) (WorkflowResult, error) {
 	}
 	comparisonSnapshot := currentSnapshot
 	if currentSnapshot.Source == "filesystem" {
-		comparisonSnapshot, err = snapshotFilesystem(absoluteRoot, []string{"**"})
-		if err != nil {
+		metadataSnapshot, snapshotErr := snapshotFilesystemMetadata(absoluteRoot)
+		if snapshotErr != nil {
 			return WorkflowResult{}, workflowFailure(FailureDeny, "", "could not safely compare workspace metadata")
 		}
+		comparisonSnapshot = mergeDeclaredSnapshot(metadataSnapshot, currentSnapshot, paths)
 	}
 
 	outputs, err := verifyDeclaredOutputs(absoluteRoot, resolved.Configuration, manifest, workflowID, state.Snapshot, currentSnapshot)
@@ -146,7 +147,10 @@ func VerifyWorkflow(root, workflowID, runID string) (WorkflowResult, error) {
 		OutOfScopeChanges: outOfScope,
 	}
 	if len(outOfScope) > 0 {
-		result.Warnings = []string{"Observed changes outside workflow write paths are reported, not prevented by Station."}
+		result.Warnings = []string{
+			"Observed changes outside workflow write paths are reported, not prevented by Station.",
+			"Filesystem edits preserving both size and modification time may be missed without Git evidence. Git path-name evidence may not distinguish edits to paths already changed at preparation.",
+		}
 	}
 	return result, nil
 }
@@ -212,7 +216,7 @@ func validSnapshotEntries(entries []SnapshotEntry) bool {
 		}
 		seen[entry.Path] = struct{}{}
 		if entry.Exists {
-			if !validSHA256(entry.SHA256) || entry.ModifiedAt.IsZero() {
+			if (entry.SHA256 != "" && !validSHA256(entry.SHA256)) || entry.ModifiedAt.IsZero() {
 				return false
 			}
 		} else if entry.SHA256 != "" || entry.Bytes != 0 || !entry.ModifiedAt.IsZero() {

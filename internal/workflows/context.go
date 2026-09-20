@@ -110,6 +110,14 @@ func snapshotWorkspace(root string, paths []string) (Snapshot, error) {
 }
 
 func snapshotFilesystem(root string, paths []string) (Snapshot, error) {
+	return snapshotFilesystemWithContent(root, paths, true)
+}
+
+func snapshotFilesystemMetadata(root string) (Snapshot, error) {
+	return snapshotFilesystemWithContent(root, []string{"**"}, false)
+}
+
+func snapshotFilesystemWithContent(root string, paths []string, hashContent bool) (Snapshot, error) {
 	if root == "" {
 		return Snapshot{}, fmt.Errorf("workspace root is required")
 	}
@@ -142,7 +150,7 @@ func snapshotFilesystem(root string, paths []string) (Snapshot, error) {
 		}
 		if errors.Is(statErr, fs.ErrNotExist) {
 			if wildcard {
-				if err := walkSnapshotPattern(absoluteRoot, rootHandle, pattern, entries, omittedPaths); err != nil {
+				if err := walkSnapshotPattern(absoluteRoot, rootHandle, pattern, entries, omittedPaths, hashContent); err != nil {
 					return Snapshot{}, err
 				}
 			} else {
@@ -151,26 +159,32 @@ func snapshotFilesystem(root string, paths []string) (Snapshot, error) {
 			continue
 		}
 		if wildcard {
-			if err := walkSnapshotPattern(absoluteRoot, rootHandle, pattern, entries, omittedPaths); err != nil {
+			if err := walkSnapshotPattern(absoluteRoot, rootHandle, pattern, entries, omittedPaths, hashContent); err != nil {
 				return Snapshot{}, err
 			}
 			continue
 		}
 		if info.IsDir() {
-			if err := walkSnapshotDirectory(absoluteRoot, rootHandle, pattern, pattern, true, entries, omittedPaths); err != nil {
+			if err := walkSnapshotDirectory(absoluteRoot, rootHandle, pattern, pattern, true, entries, omittedPaths, hashContent); err != nil {
 				return Snapshot{}, err
 			}
 			continue
 		}
-		entry, included, err := snapshotFile(absoluteRoot, rootHandle, pattern)
+		var entry SnapshotEntry
+		var included bool
+		if hashContent {
+			entry, included, err = snapshotFile(absoluteRoot, rootHandle, pattern)
+		} else {
+			entry, included, err = snapshotMetadataFile(rootHandle, pattern)
+		}
 		if err != nil {
 			return Snapshot{}, err
 		}
 		if included {
-			if entry.SHA256 == "" {
+			if hashContent && entry.SHA256 == "" {
 				omittedPaths[pattern] = struct{}{}
 			} else {
-				entries[pattern] = entry
+				entries[entry.Path] = entry
 			}
 		}
 	}
@@ -187,7 +201,65 @@ func snapshotFilesystem(root string, paths []string) (Snapshot, error) {
 	return result, nil
 }
 
-func walkSnapshotPattern(rootPath string, root *os.Root, pattern string, entries map[string]SnapshotEntry, omittedPaths map[string]struct{}) error {
+func mergeDeclaredSnapshot(metadata, declared Snapshot, declaredPaths []string) Snapshot {
+	entries := make(map[string]SnapshotEntry, len(metadata.Entries)+len(declared.Entries))
+	declaredEntries := snapshotEntryMap(declared.Entries)
+	for _, entry := range metadata.Entries {
+		if matchesDeclaredSnapshotPath(declaredPaths, entry.Path) {
+			if _, found := declaredEntries[entry.Path]; !found {
+				continue
+			}
+		}
+		entries[entry.Path] = entry
+	}
+	for _, entry := range declared.Entries {
+		entries[entry.Path] = entry
+	}
+
+	omittedPaths := make(map[string]struct{}, len(metadata.OmittedPaths)+len(declared.OmittedPaths))
+	for _, value := range metadata.OmittedPaths {
+		omittedPaths[value] = struct{}{}
+	}
+	for _, value := range declared.OmittedPaths {
+		omittedPaths[value] = struct{}{}
+	}
+	changedPaths := make(map[string]struct{}, len(metadata.ChangedPaths)+len(declared.ChangedPaths))
+	for _, value := range metadata.ChangedPaths {
+		changedPaths[value] = struct{}{}
+	}
+	for _, value := range declared.ChangedPaths {
+		changedPaths[value] = struct{}{}
+	}
+
+	result := Snapshot{Source: declared.Source, Entries: make([]SnapshotEntry, 0, len(entries))}
+	for _, entry := range entries {
+		result.Entries = append(result.Entries, entry)
+	}
+	sort.Slice(result.Entries, func(i, j int) bool { return result.Entries[i].Path < result.Entries[j].Path })
+	for value := range omittedPaths {
+		result.OmittedPaths = append(result.OmittedPaths, value)
+	}
+	sort.Strings(result.OmittedPaths)
+	for value := range changedPaths {
+		result.ChangedPaths = append(result.ChangedPaths, value)
+	}
+	sort.Strings(result.ChangedPaths)
+	return result
+}
+
+func matchesDeclaredSnapshotPath(paths []string, value string) bool {
+	for _, pattern := range paths {
+		if matchesSnapshotPattern(pattern, value) {
+			return true
+		}
+		if !hasSnapshotWildcard(pattern) && strings.HasPrefix(value, strings.TrimSuffix(pattern, "/")+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func walkSnapshotPattern(rootPath string, root *os.Root, pattern string, entries map[string]SnapshotEntry, omittedPaths map[string]struct{}, hashContent bool) error {
 	var prefix []string
 	for _, segment := range strings.Split(pattern, "/") {
 		if strings.ContainsAny(segment, "*?[") {
@@ -214,10 +286,10 @@ func walkSnapshotPattern(rootPath string, root *os.Root, pattern string, entries
 			return nil
 		}
 	}
-	return walkSnapshotDirectory(rootPath, root, directory, pattern, false, entries, omittedPaths)
+	return walkSnapshotDirectory(rootPath, root, directory, pattern, false, entries, omittedPaths, hashContent)
 }
 
-func walkSnapshotDirectory(rootPath string, root *os.Root, directory, pattern string, includeAll bool, entries map[string]SnapshotEntry, omittedPaths map[string]struct{}) error {
+func walkSnapshotDirectory(rootPath string, root *os.Root, directory, pattern string, includeAll bool, entries map[string]SnapshotEntry, omittedPaths map[string]struct{}, hashContent bool) error {
 	dir, err := root.Open(directory)
 	if err != nil {
 		return fmt.Errorf("open snapshot directory: %w", err)
@@ -242,7 +314,7 @@ func walkSnapshotDirectory(rootPath string, root *os.Root, directory, pattern st
 			continue
 		}
 		if child.IsDir() {
-			if err := walkSnapshotDirectory(rootPath, root, relative, pattern, includeAll, entries, omittedPaths); err != nil {
+			if err := walkSnapshotDirectory(rootPath, root, relative, pattern, includeAll, entries, omittedPaths, hashContent); err != nil {
 				return err
 			}
 			continue
@@ -250,7 +322,14 @@ func walkSnapshotDirectory(rootPath string, root *os.Root, directory, pattern st
 		if !includeAll && !matchesSnapshotPattern(pattern, relative) {
 			continue
 		}
-		entry, included, err := snapshotFile(rootPath, root, relative)
+		var entry SnapshotEntry
+		var included bool
+		var err error
+		if hashContent {
+			entry, included, err = snapshotFile(rootPath, root, relative)
+		} else {
+			entry, included, err = snapshotMetadataFile(root, relative)
+		}
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
@@ -258,14 +337,55 @@ func walkSnapshotDirectory(rootPath string, root *os.Root, directory, pattern st
 			return err
 		}
 		if included {
-			if entry.SHA256 == "" {
+			if hashContent && entry.SHA256 == "" {
 				omittedPaths[relative] = struct{}{}
 			} else {
-				entries[relative] = entry
+				entries[entry.Path] = entry
 			}
 		}
 	}
 	return nil
+}
+
+func snapshotMetadataFile(root *os.Root, relative string) (SnapshotEntry, bool, error) {
+	if excludedContextPath(relative) {
+		return SnapshotEntry{}, false, nil
+	}
+
+	parts := strings.Split(relative, "/")
+	var prefix string
+	var info fs.FileInfo
+	for index, part := range parts {
+		if prefix == "" {
+			prefix = part
+		} else {
+			prefix = path.Join(prefix, part)
+		}
+		currentInfo, err := root.Lstat(prefix)
+		if err != nil {
+			return SnapshotEntry{}, false, err
+		}
+		if currentInfo.Mode()&os.ModeSymlink != 0 {
+			return metadataSnapshotEntry(prefix, currentInfo), true, nil
+		}
+		if index < len(parts)-1 && !currentInfo.IsDir() {
+			return SnapshotEntry{}, false, fs.ErrNotExist
+		}
+		info = currentInfo
+	}
+	if !info.Mode().IsRegular() {
+		return SnapshotEntry{}, false, nil
+	}
+	return metadataSnapshotEntry(relative, info), true, nil
+}
+
+func metadataSnapshotEntry(relative string, info fs.FileInfo) SnapshotEntry {
+	return SnapshotEntry{
+		Path:       relative,
+		Exists:     true,
+		Bytes:      info.Size(),
+		ModifiedAt: info.ModTime().UTC(),
+	}
 }
 
 func snapshotFile(rootPath string, root *os.Root, relative string) (SnapshotEntry, bool, error) {

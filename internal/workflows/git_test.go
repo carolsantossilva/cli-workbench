@@ -1,8 +1,10 @@
 package workflows
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -82,9 +84,9 @@ func TestSnapshotGitWorkspaceCapturesChangesAndExplicitPaths(t *testing.T) {
 	}
 	wantEntries := map[string]SnapshotEntry{
 		"deleted.txt":     {Path: "deleted.txt", Exists: false},
-		"new file.txt":    gitEntry(t, "new file.txt", untrackedContent),
+		"new file.txt":    {Path: "new file.txt", Exists: true, Bytes: int64(len(untrackedContent))},
 		"stable/brief.md": gitEntry(t, "stable/brief.md", []byte("explicit input\n")),
-		"tracked.txt":     gitEntry(t, "tracked.txt", trackedContent),
+		"tracked.txt":     {Path: "tracked.txt", Exists: true, Bytes: int64(len(trackedContent))},
 	}
 	if len(snapshot.Entries) != len(wantEntries) {
 		t.Fatalf("Entries = %#v, want entries for changed files and explicit path", snapshot.Entries)
@@ -107,6 +109,44 @@ func TestSnapshotGitWorkspaceCapturesChangesAndExplicitPaths(t *testing.T) {
 	}
 }
 
+func TestSnapshotGitWorkspaceReportsOutOfScopePathWithoutHashingContent(t *testing.T) {
+	root := t.TempDir()
+	initSnapshotTestRepo(t, root)
+	declaredContent := []byte("declared input\n")
+	writeGitFixture(t, root, "declared.md", declaredContent)
+	runSnapshotTestGit(t, root, "add", "--", "declared.md")
+	runSnapshotTestGit(t, root, "-c", "user.name=Station Test", "-c", "user.email=station@example.invalid", "commit", "--quiet", "-m", "baseline")
+
+	outsideContent := []byte("out-of-scope content that must not be hashed or persisted\n")
+	writeGitFixture(t, root, "outside.md", outsideContent)
+	snapshot, usedGit, err := snapshotGitWorkspace(root, []string{"declared.md"})
+	if err != nil {
+		t.Fatalf("snapshotGitWorkspace() error = %v", err)
+	}
+	if !usedGit || snapshot.Source != "git" {
+		t.Fatalf("snapshotGitWorkspace() = (%#v, %t), want Git snapshot", snapshot, usedGit)
+	}
+	if len(snapshot.ChangedPaths) != 1 || snapshot.ChangedPaths[0] != "outside.md" {
+		t.Fatalf("ChangedPaths = %#v, want outside.md", snapshot.ChangedPaths)
+	}
+	entries := snapshotEntryMap(snapshot.Entries)
+	declared, ok := entries["declared.md"]
+	if !ok || declared.SHA256 != gitHash(declaredContent) {
+		t.Fatalf("declared entry = %#v, want its declared content hash", declared)
+	}
+	outside, ok := entries["outside.md"]
+	if !ok || outside.SHA256 != "" || outside.Bytes != int64(len(outsideContent)) || outside.ModifiedAt.IsZero() {
+		t.Fatalf("out-of-scope Git entry = %#v, want metadata without a content hash", outside)
+	}
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal Git snapshot: %v", err)
+	}
+	if bytes.Contains(encoded, outsideContent) {
+		t.Fatal("Git snapshot persisted out-of-scope content")
+	}
+}
+
 func TestSnapshotGitWorkspaceCapturesUntrackedFilesWithoutHEAD(t *testing.T) {
 	root := t.TempDir()
 	initSnapshotTestRepo(t, root)
@@ -123,8 +163,8 @@ func TestSnapshotGitWorkspaceCapturesUntrackedFilesWithoutHEAD(t *testing.T) {
 	if len(snapshot.ChangedPaths) != 1 || snapshot.ChangedPaths[0] != "draft.md" {
 		t.Fatalf("ChangedPaths = %#v, want draft.md", snapshot.ChangedPaths)
 	}
-	if len(snapshot.Entries) != 1 || snapshot.Entries[0].Path != "draft.md" || snapshot.Entries[0].SHA256 != gitHash(content) {
-		t.Fatalf("Entries = %#v, want metadata for draft.md", snapshot.Entries)
+	if len(snapshot.Entries) != 1 || snapshot.Entries[0].Path != "draft.md" || snapshot.Entries[0].SHA256 != "" || snapshot.Entries[0].Bytes != int64(len(content)) {
+		t.Fatalf("Entries = %#v, want metadata-only entry for undeclared draft.md", snapshot.Entries)
 	}
 }
 
@@ -166,8 +206,8 @@ func TestSnapshotGitWorkspacePreservesNewlineAndWhitespaceInPaths(t *testing.T) 
 	if len(snapshot.ChangedPaths) != 1 || snapshot.ChangedPaths[0] != name {
 		t.Fatalf("ChangedPaths = %#v, want exact NUL-delimited filename %q", snapshot.ChangedPaths, name)
 	}
-	if len(snapshot.Entries) != 1 || snapshot.Entries[0].Path != name || snapshot.Entries[0].SHA256 != gitHash(content) {
-		t.Fatalf("Entries = %#v, want metadata for exact filename %q", snapshot.Entries, name)
+	if len(snapshot.Entries) != 1 || snapshot.Entries[0].Path != name || snapshot.Entries[0].SHA256 != "" || snapshot.Entries[0].Bytes != int64(len(content)) {
+		t.Fatalf("Entries = %#v, want metadata-only entry for exact filename %q", snapshot.Entries, name)
 	}
 }
 

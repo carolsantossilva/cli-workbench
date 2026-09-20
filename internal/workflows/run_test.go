@@ -82,6 +82,58 @@ func TestPrepareWorkflowBuildsAuditedContextWithoutPersistingInputContent(t *tes
 	}
 }
 
+func TestPrepareWorkflowPersistsHashesOnlyForDeclaredPaths(t *testing.T) {
+	root := t.TempDir()
+	inputPath := "docs/station/idea.md"
+	outputPath := "docs/station/brief.md"
+	outsidePath := "apps/web/notes.md"
+	inputContent := []byte("A design idea.\n")
+	outputContent := []byte("An existing brief.\n")
+	outsideContent := []byte("This unrelated file must remain metadata-only.\n")
+	manifest := workflowRunFixture([]string{inputPath})
+	writeTestFile(t, root, inputPath, inputContent)
+	writeTestFile(t, root, outputPath, outputContent)
+	writeTestFile(t, root, outsidePath, outsideContent)
+	writeTestFile(t, root, "docs/station/workflows/brainstorm.md", []byte("instruction"))
+
+	packet, runID, err := prepareWorkflow(root, "brainstorm", Input{Manifest: manifest})
+	if err != nil {
+		t.Fatalf("prepareWorkflow() error = %v", err)
+	}
+	state, err := readRunState(root, runID)
+	if err != nil {
+		t.Fatalf("read prepared run state: %v", err)
+	}
+	entries := snapshotEntryMap(state.Snapshot.Entries)
+	for path, content := range map[string][]byte{inputPath: inputContent, outputPath: outputContent} {
+		entry, ok := entries[path]
+		if !ok {
+			t.Fatalf("run snapshot omits declared path %q: %#v", path, state.Snapshot.Entries)
+		}
+		if want := gitHash(content); entry.SHA256 != want {
+			t.Errorf("declared path %q hash = %q, want %q", path, entry.SHA256, want)
+		}
+	}
+	outside, ok := entries[outsidePath]
+	if !ok {
+		t.Fatalf("run snapshot omits out-of-scope metadata for %q: %#v", outsidePath, state.Snapshot.Entries)
+	}
+	if outside.SHA256 != "" || outside.Bytes != int64(len(outsideContent)) || outside.ModifiedAt.IsZero() {
+		t.Errorf("out-of-scope snapshot entry = %#v, want size and mtime metadata without a content hash", outside)
+	}
+	if !strings.Contains(strings.Join(packet.Warnings, " "), "Git path-name evidence may not distinguish edits to paths already changed at preparation") {
+		t.Fatalf("context warnings omit the Git path-name limitation: %#v", packet.Warnings)
+	}
+
+	stateBytes, err := os.ReadFile(filepath.Join(root, ".station", "runs", runID+".json"))
+	if err != nil {
+		t.Fatalf("read persisted run state: %v", err)
+	}
+	if bytes.Contains(stateBytes, outsideContent) {
+		t.Fatal("run state persisted out-of-scope file content")
+	}
+}
+
 func TestPrepareWorkflowMissingRequiredInputDoesNotCreateAudit(t *testing.T) {
 	root := t.TempDir()
 	manifest := workflowRunFixture([]string{"docs/station/idea.md"})

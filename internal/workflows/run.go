@@ -113,10 +113,11 @@ func prepareWorkflow(root, id string, input Input) (ContextPacket, string, error
 	}
 	runSnapshot := declaredSnapshot
 	if declaredSnapshot.Source == "filesystem" {
-		runSnapshot, err = snapshotFilesystem(absoluteRoot, []string{"**"})
-		if err != nil {
-			return ContextPacket{}, "", workflowFailure(FailureDeny, "", "could not safely capture workspace snapshot")
+		metadataSnapshot, snapshotErr := snapshotFilesystemMetadata(absoluteRoot)
+		if snapshotErr != nil {
+			return ContextPacket{}, "", workflowFailure(FailureDeny, "", "could not safely capture workspace metadata")
 		}
+		runSnapshot = mergeDeclaredSnapshot(metadataSnapshot, declaredSnapshot, declaredPaths)
 	}
 	auditPaths, auditHashes := auditSnapshot(declaredSnapshot.Entries, resolved.Configuration)
 	preparedEventID, _, err := audit.Append(absoluteRoot, audit.Event{
@@ -165,7 +166,7 @@ func prepareWorkflow(root, id string, input Input) (ContextPacket, string, error
 		Omissions:       omissions,
 		Warnings: []string{
 			"Station does not control host tools; observed changes do not prove prevention of external writes.",
-			"Secret, environment, binary, symlinked, and cache contents are excluded; changes to those contents may not be observable.",
+			"Out-of-scope filesystem metadata uses path, existence, size, and modification time only; edits preserving both size and modification time may be missed without Git evidence. Git path-name evidence may not distinguish edits to paths already changed at preparation. Secret, environment, binary, symlink, and cache contents are not persisted in snapshots.",
 		},
 	}
 	return packet, runID, nil

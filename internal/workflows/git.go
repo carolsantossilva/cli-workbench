@@ -116,7 +116,13 @@ func snapshotGitWorkspace(root string, paths []string) (Snapshot, bool, error) {
 	}
 	sort.Strings(changedPaths)
 	for _, name := range changedPaths {
-		entry, included, err := snapshotFile(absRoot, rootHandle, name)
+		if _, exists := entries[name]; exists {
+			continue
+		}
+		if _, wasOmitted := omittedPaths[name]; wasOmitted {
+			continue
+		}
+		entry, included, err := snapshotMetadataFile(rootHandle, name)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				entries[name] = SnapshotEntry{Path: name}
@@ -125,11 +131,7 @@ func snapshotGitWorkspace(root string, paths []string) (Snapshot, bool, error) {
 			return Snapshot{}, true, fmt.Errorf("snapshot changed Git path: %w", err)
 		}
 		if included {
-			if entry.SHA256 == "" {
-				omittedPaths[name] = struct{}{}
-			} else {
-				entries[name] = entry
-			}
+			entries[entry.Path] = entry
 		}
 	}
 
