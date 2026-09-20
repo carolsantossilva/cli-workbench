@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"station/internal/cli"
+	"station/internal/modes"
 )
 
 func TestInspectWithoutManifestIsShallowReadOnlyAndDoesNotRunProjectCommands(t *testing.T) {
@@ -97,6 +98,36 @@ func TestInspectDoesNotFollowAllowlistedSymlinkOutsideWorkspace(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), secret) {
 		t.Fatalf("inspection followed an external symlink: %q", stdout.String())
+	}
+}
+
+func TestInspectRejectsWorkspaceManifestSymlink(t *testing.T) {
+	targetRoot := t.TempDir()
+	created := cli.Run(context.Background(), []string{"new", "valid external manifest fixture"}, cli.Dependencies{Root: targetRoot})
+	if !created.OK {
+		t.Fatalf("create valid manifest target: %#v", created)
+	}
+
+	root := t.TempDir()
+	if err := os.Symlink(filepath.Join(targetRoot, "workspace.json"), filepath.Join(root, "workspace.json")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	_, err := modes.InspectExistingWorkspace(root)
+	if err == nil || !strings.Contains(err.Error(), "workspace.json must be a regular, non-symlink file") {
+		t.Fatalf("InspectExistingWorkspace error = %v, want static manifest symlink rejection", err)
+	}
+}
+
+func TestInspectRejectsNonObjectManifestWithoutPanicking(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "workspace.json", `[]`)
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("InspectExistingWorkspace panicked on a non-object manifest: %v", recovered)
+		}
+	}()
+	if _, err := modes.InspectExistingWorkspace(root); err == nil || !strings.Contains(err.Error(), "workspace.json is invalid") {
+		t.Fatalf("InspectExistingWorkspace error = %v, want an invalid workspace manifest error", err)
 	}
 }
 

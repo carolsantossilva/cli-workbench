@@ -74,7 +74,23 @@ func inspectExistingWorkspace(root string) (ExistingInspection, error) {
 	if manifestInfo.Mode()&os.ModeSymlink != 0 || !manifestInfo.Mode().IsRegular() {
 		return ExistingInspection{}, errors.New("workspace.json must be a regular, non-symlink file")
 	}
-	manifest, err := workspace.LoadWorkspace(absoluteRoot)
+	manifestFile, err := rootHandle.Open("workspace.json")
+	if err != nil {
+		return ExistingInspection{}, fmt.Errorf("open workspace.json within workspace root: %w", err)
+	}
+	defer manifestFile.Close()
+	openedInfo, err := manifestFile.Stat()
+	if err != nil {
+		return ExistingInspection{}, fmt.Errorf("stat workspace.json: %w", err)
+	}
+	if !openedInfo.Mode().IsRegular() || !os.SameFile(manifestInfo, openedInfo) {
+		return ExistingInspection{}, errors.New("workspace.json changed while opening")
+	}
+	manifestBytes, err := io.ReadAll(manifestFile)
+	if err != nil {
+		return ExistingInspection{}, fmt.Errorf("read workspace.json: %w", err)
+	}
+	manifest, err := workspace.LoadWorkspaceBytes(manifestBytes)
 	if err != nil {
 		return ExistingInspection{}, fmt.Errorf("workspace.json is invalid: %w", err)
 	}
@@ -104,13 +120,16 @@ func inspectWithoutManifest(root string, rootHandle *os.Root) (ExistingInspectio
 	if err != nil {
 		return ExistingInspection{}, fmt.Errorf("list workspace root: %w", err)
 	}
-	children, readErr := directory.ReadDir(-1)
+	children, readErr := directory.ReadDir(maxInspectionEntries + 1)
 	closeErr := directory.Close()
-	if readErr != nil {
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
 		return ExistingInspection{}, fmt.Errorf("list workspace root: %w", readErr)
 	}
 	if closeErr != nil {
 		return ExistingInspection{}, fmt.Errorf("close workspace root listing: %w", closeErr)
+	}
+	if len(children) > maxInspectionEntries {
+		return ExistingInspection{}, errors.New("inspection exceeded the immediate-root entry limit")
 	}
 	entries := make([]InspectionEntry, 0, len(children))
 	for _, child := range children {
@@ -135,7 +154,11 @@ func inspectWithoutManifest(root string, rootHandle *os.Root) (ExistingInspectio
 }
 
 func inspectDeclaredPaths(root *os.Root, patterns []string) ([]InspectionEntry, error) {
+	if len(patterns) > maxInspectionEntries {
+		return nil, errors.New("inspection exceeded the declared-path entry limit")
+	}
 	entries := make(map[string]InspectionEntry)
+	visited := 0
 	for _, pattern := range patterns {
 		if !validInspectionPattern(pattern) {
 			return nil, fmt.Errorf("workflow read path is invalid: %q", pattern)
@@ -153,17 +176,21 @@ func inspectDeclaredPaths(root *os.Root, patterns []string) ([]InspectionEntry, 
 		}
 		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 			if policy.PathMatches([]string{pattern}, prefix) {
-				entries[prefix] = inspectionEntry(prefix, info)
+				if err := storeInspectionEntry(entries, inspectionEntry(prefix, info)); err != nil {
+					return nil, err
+				}
 			}
 			continue
 		}
 		if !hasInspectionWildcard(pattern) {
 			if policy.PathMatches([]string{pattern}, prefix) {
-				entries[prefix] = inspectionEntry(prefix, info)
+				if err := storeInspectionEntry(entries, inspectionEntry(prefix, info)); err != nil {
+					return nil, err
+				}
 			}
 			continue
 		}
-		if err := walkDeclaredDirectory(root, prefix, pattern, entries); err != nil {
+		if err := walkDeclaredDirectory(root, prefix, pattern, entries, &visited); err != nil {
 			return nil, err
 		}
 	}
@@ -175,19 +202,28 @@ func inspectDeclaredPaths(root *os.Root, patterns []string) ([]InspectionEntry, 
 	return result, nil
 }
 
-func walkDeclaredDirectory(root *os.Root, directory, pattern string, entries map[string]InspectionEntry) error {
+func walkDeclaredDirectory(root *os.Root, directory, pattern string, entries map[string]InspectionEntry, visited *int) error {
 	handle, err := root.Open(filepath.FromSlash(directory))
 	if err != nil {
 		return fmt.Errorf("open declared directory %s: %w", directory, err)
 	}
-	children, readErr := handle.ReadDir(-1)
+	remaining := maxInspectionEntries - *visited
+	if remaining < 0 {
+		_ = handle.Close()
+		return errors.New("inspection exceeded the declared-path entry limit")
+	}
+	children, readErr := handle.ReadDir(remaining + 1)
 	closeErr := handle.Close()
-	if readErr != nil {
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
 		return fmt.Errorf("read declared directory %s: %w", directory, readErr)
 	}
 	if closeErr != nil {
 		return fmt.Errorf("close declared directory %s: %w", directory, closeErr)
 	}
+	if len(children) > remaining {
+		return errors.New("inspection exceeded the declared-path entry limit")
+	}
+	*visited += len(children)
 	for _, child := range children {
 		name := path.Join(directory, child.Name())
 		info, err := root.Lstat(filepath.FromSlash(name))
@@ -199,24 +235,77 @@ func walkDeclaredDirectory(root *os.Root, directory, pattern string, entries map
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			if policy.PathMatches([]string{pattern}, name) {
-				entries[name] = inspectionEntry(name, info)
+				if err := storeInspectionEntry(entries, inspectionEntry(name, info)); err != nil {
+					return err
+				}
 			}
 			continue
 		}
 		if info.IsDir() {
-			if err := walkDeclaredDirectory(root, name, pattern, entries); err != nil {
-				return err
+			if patternMayMatchDescendant(pattern, name) {
+				if err := walkDeclaredDirectory(root, name, pattern, entries, visited); err != nil {
+					return err
+				}
 			}
 			continue
 		}
 		if policy.PathMatches([]string{pattern}, name) {
-			entries[name] = inspectionEntry(name, info)
-			if len(entries) > maxInspectionEntries {
-				return errors.New("inspection exceeded the declared-path entry limit")
+			if err := storeInspectionEntry(entries, inspectionEntry(name, info)); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
+}
+
+func storeInspectionEntry(entries map[string]InspectionEntry, entry InspectionEntry) error {
+	entries[entry.Path] = entry
+	if len(entries) > maxInspectionEntries {
+		return errors.New("inspection exceeded the declared-path entry limit")
+	}
+	return nil
+}
+
+func patternMayMatchDescendant(pattern, directory string) bool {
+	patterns := strings.Split(pattern, "/")
+	segments := strings.Split(directory, "/")
+	states := map[int]struct{}{0: {}}
+	states = inspectionPatternClosure(patterns, states)
+	for _, segment := range segments {
+		next := make(map[int]struct{})
+		for index := range states {
+			if index >= len(patterns) {
+				continue
+			}
+			if patterns[index] == "**" {
+				next[index] = struct{}{}
+				continue
+			}
+			matched, err := path.Match(patterns[index], segment)
+			if err == nil && matched {
+				next[index+1] = struct{}{}
+			}
+		}
+		states = inspectionPatternClosure(patterns, next)
+		if len(states) == 0 {
+			return false
+		}
+	}
+	for index := range states {
+		if index < len(patterns) {
+			return true
+		}
+	}
+	return false
+}
+
+func inspectionPatternClosure(patterns []string, states map[int]struct{}) map[int]struct{} {
+	for index := range states {
+		for next := index; next < len(patterns) && patterns[next] == "**"; next++ {
+			states[next+1] = struct{}{}
+		}
+	}
+	return states
 }
 
 func inspectRootEntry(root *os.Root, name string) (InspectionEntry, error) {

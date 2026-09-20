@@ -229,15 +229,53 @@ func validateModulePath(modulePath string) error {
 		return nil
 	}
 	if strings.TrimSpace(modulePath) != modulePath || strings.ContainsAny(modulePath, "\\\r\n\t\x00 ") ||
-		filepath.IsAbs(modulePath) || !fs.ValidPath(modulePath) || strings.HasPrefix(modulePath, "-") {
+		filepath.IsAbs(modulePath) || !fs.ValidPath(modulePath) {
 		return fmt.Errorf("module path must be an explicit, relative Go module path")
 	}
 	for _, segment := range strings.Split(modulePath, "/") {
-		if segment == "" || segment == "." || segment == ".." {
+		if !validModulePathElement(segment) {
 			return fmt.Errorf("module path must be an explicit, relative Go module path")
 		}
 	}
 	return nil
+}
+
+func validModulePathElement(segment string) bool {
+	if segment == "" || segment[0] == '.' || segment[len(segment)-1] == '.' {
+		return false
+	}
+	for _, character := range segment {
+		if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') || strings.ContainsRune("-._~", character) {
+			continue
+		}
+		return false
+	}
+
+	prefix := strings.SplitN(segment, ".", 2)[0]
+	upperPrefix := strings.ToUpper(prefix)
+	switch upperPrefix {
+	case "CON", "PRN", "AUX", "NUL":
+		return false
+	}
+	if len(upperPrefix) == 4 && upperPrefix[3] >= '1' && upperPrefix[3] <= '9' &&
+		(upperPrefix[:3] == "COM" || upperPrefix[:3] == "LPT") {
+		return false
+	}
+	if tilde := strings.LastIndexByte(prefix, '~'); tilde >= 0 && tilde < len(prefix)-1 {
+		suffix := prefix[tilde+1:]
+		digitsOnly := true
+		for _, character := range suffix {
+			if character < '0' || character > '9' {
+				digitsOnly = false
+				break
+			}
+		}
+		if digitsOnly {
+			return false
+		}
+	}
+	return true
 }
 
 func createFile(root *os.Root, name string, content []byte) error {

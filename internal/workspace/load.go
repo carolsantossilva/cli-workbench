@@ -93,11 +93,19 @@ func loadWorkspace(root string) (*Workspace, error) {
 	if err != nil {
 		return nil, fmt.Errorf("workspace.json: %w", err)
 	}
+	return loadWorkspaceBytes(content)
+}
+
+func loadWorkspaceBytes(content []byte) (*Workspace, error) {
 	var document any
 	if err := json.Unmarshal(content, &document); err != nil {
 		return nil, fmt.Errorf("invalid JSON in workspace.json: %w", err)
 	}
-	version, ok := document.(map[string]any)["schemaVersion"].(float64)
+	manifestObject, ok := document.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("workspace.json must contain a JSON object")
+	}
+	version, ok := manifestObject["schemaVersion"].(float64)
 	if !ok || version != 1 {
 		return nil, fmt.Errorf("unsupported schemaVersion")
 	}
@@ -118,6 +126,13 @@ func loadWorkspace(root string) (*Workspace, error) {
 
 func LoadWorkspace(root string) (*Workspace, error) {
 	return loadWorkspace(root)
+}
+
+// LoadWorkspaceBytes validates and decodes a workspace manifest from already
+// read bytes. Callers that hold a root-anchored file handle can use this to
+// avoid reopening workspace.json through an unanchored absolute path.
+func LoadWorkspaceBytes(content []byte) (*Workspace, error) {
+	return loadWorkspaceBytes(content)
 }
 
 func workspaceSchema() (*jsonschema.Schema, error) {
