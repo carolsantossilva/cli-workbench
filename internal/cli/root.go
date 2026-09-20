@@ -90,6 +90,9 @@ func newRootCommand(root string, format *string, result *Result, handled *bool) 
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Version:       Version,
+		CompletionOptions: cobra.CompletionOptions{
+			DisableDefaultCmd: true,
+		},
 	}
 	command.AddCommand(newValidateCommand(root, format, result, handled))
 	command.AddCommand(newNewCommand(root, format, result, handled))

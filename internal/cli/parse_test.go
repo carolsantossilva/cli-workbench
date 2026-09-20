@@ -20,6 +20,15 @@ func TestRunCLIShowsRootHelp(t *testing.T) {
 	}
 }
 
+func TestRunCLIRejectsUnplannedDefaultCompletionCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	result := runCLI(context.Background(), []string{"completion"}, Dependencies{Stdout: &stdout, Stderr: &stderr})
+
+	if result.OK || result.ExitCode != 2 || !strings.Contains(stderr.String(), "unknown command") {
+		t.Fatalf("result = %#v, stdout = %q, stderr = %q; completion is not part of the planned command surface", result, stdout.String(), stderr.String())
+	}
+}
+
 func TestRunCLIShowsVersion(t *testing.T) {
 	var stdout bytes.Buffer
 	result := runCLI(context.Background(), []string{"--version"}, Dependencies{Stdout: &stdout})
