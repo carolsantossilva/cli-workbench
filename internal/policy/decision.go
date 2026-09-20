@@ -106,9 +106,13 @@ func authorize(action Action, manifest *workspace.Workspace, workflowID string) 
 		if isShell(command.Executable, command.Args) {
 			return decision(Deny, "shell executables are not allowed", "no-shell")
 		}
+		if action.ProjectID != "" && action.ProjectID != command.Project {
+			return decision(Deny, "action project does not match the declared command project", "command.project")
+		}
 		if _, found := projectByID(manifest, command.Project); !found {
 			return decision(Deny, "command project is not declared", "command.project")
 		}
+		action.ProjectID = command.Project
 	}
 
 	rules, defaultOutcome, err := parseExecutionPolicy(manifest.Policies.Execution)

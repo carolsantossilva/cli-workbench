@@ -39,3 +39,20 @@ func TestAuthorizeCommandDeniesUnknownAndShellExecutable(t *testing.T) {
 		t.Fatalf("shell executable decision = %q, want deny", decision.Outcome)
 	}
 }
+
+func TestAuthorizeBindsCommandPolicyToDeclaredProject(t *testing.T) {
+	for _, projectID := range []string{"other", ""} {
+		t.Run("project-"+projectID, func(t *testing.T) {
+			manifest := policyFixture()
+			manifest.Policies.Execution = map[string]any{
+				"rules": []any{map[string]any{
+					"kind": "command", "project": "web", "commandId": "web.test", "decision": "deny",
+				}},
+			}
+			decision := authorize(Action{Kind: ActionCommand, CommandID: "web.test", ProjectID: projectID}, manifest, "build")
+			if decision.Outcome != Deny {
+				t.Fatalf("command decision for project %q = %q, want project-specific deny", projectID, decision.Outcome)
+			}
+		})
+	}
+}

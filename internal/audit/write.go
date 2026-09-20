@@ -37,7 +37,9 @@ const (
 
 // Event contains only redacted metadata. Paths must be relative, pre-redacted
 // paths; content, secret values, and arbitrary detail maps are intentionally
-// not part of this API.
+// not part of this API. The writer rejects recognizable embedded value and
+// credential markers, but callers remain responsible for redacting path-shaped
+// data that cannot be distinguished from a legitimate filename.
 type Event struct {
 	Kind           Kind     `json:"kind"`
 	Decision       Decision `json:"decision"`
@@ -155,7 +157,7 @@ func validateEvent(event Event) error {
 		return fmt.Errorf("invalid related audit event ID")
 	}
 	for _, path := range event.Paths {
-		if path == "" || path == "." || !filepath.IsLocal(path) || strings.ContainsAny(path, "\r\n\x00") {
+		if path == "" || path == "." || len(path) > 4096 || !filepath.IsLocal(path) || !fs.ValidPath(filepath.ToSlash(path)) || unsafeAuditPathMetadata(path) {
 			return fmt.Errorf("audit paths must be relative, local, and redacted")
 		}
 	}
@@ -175,6 +177,39 @@ func validateEvent(event Event) error {
 		}
 	}
 	return nil
+}
+
+func unsafeAuditPathMetadata(path string) bool {
+	if strings.ContainsAny(path, "\\\r\n\x00=") || strings.Contains(path, "://") {
+		return true
+	}
+	lower := strings.ToLower(path)
+	if strings.Contains(lower, "-----begin") {
+		return true
+	}
+	tokens := strings.FieldsFunc(lower, func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
+	})
+	for i := 0; i+1 < len(tokens); i++ {
+		first, second := tokens[i], tokens[i+1]
+		switch {
+		case first == "secret" && second == "value",
+			first == "password" && second == "value",
+			first == "passwd" && second == "value",
+			first == "token" && second == "value",
+			(first == "credential" || first == "credentials") && second == "value",
+			first == "private" && second == "key",
+			(first == "api" || first == "access") && second == "key",
+			(first == "access" || first == "refresh" || first == "bearer") && second == "token":
+			return true
+		}
+	}
+	for i := 0; i+2 < len(tokens); i++ {
+		if tokens[i] == "secret" && tokens[i+1] == "access" && tokens[i+2] == "key" {
+			return true
+		}
+	}
+	return false
 }
 
 func validIdentifier(value string) bool {

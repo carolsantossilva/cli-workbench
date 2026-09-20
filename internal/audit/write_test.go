@@ -132,6 +132,35 @@ func TestAppendRejectsInvalidOrUndecidedEventWithoutCreatingAuditDirectory(t *te
 	}
 }
 
+func TestAppendRejectsValueLikeAuditPathsWithoutPersistingThem(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		value string
+	}{
+		{name: "credential assignment", value: "SERVICE_PASSWORD=fixture-private-value"},
+		{name: "secret-labeled value", value: "fixture-secret-value-must-not-appear"},
+		{name: "PEM marker", value: "-----BEGIN PRIVATE KEY-----"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			_, _, err := Append(root, Event{
+				Kind:     KindPrepared,
+				Decision: DecisionAllow,
+				Paths:    []string{test.value},
+			})
+			if err == nil {
+				t.Fatal("Append accepted value-like path metadata")
+			}
+			if strings.Contains(err.Error(), test.value) {
+				t.Fatal("validation error leaked rejected audit metadata")
+			}
+			if _, err := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(err) {
+				t.Fatalf("rejected metadata created .station: stat error = %v", err)
+			}
+		})
+	}
+}
+
 func TestAppendRejectsEmptyRootWithoutWritingToWorkingDirectory(t *testing.T) {
 	workingDirectory := t.TempDir()
 	t.Chdir(workingDirectory)

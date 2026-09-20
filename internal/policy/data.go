@@ -64,6 +64,16 @@ func scanData(path, content, category string, policy DataPolicy) ScanResult {
 				return ScanResult{Decision: decision(Ask, "unknown data must be reviewed and cannot be allowed", ruleID)}
 			}
 		}
+		if outcome, exists := policy.CategoryDecisions[category]; exists {
+			switch outcome {
+			case Deny:
+				return ScanResult{Decision: decision(Deny, "matched unknown data category deny", "data.categories."+category)}
+			case Ask:
+				return ScanResult{Decision: decision(Ask, "matched unknown data category review", "data.categories."+category)}
+			default:
+				return ScanResult{Decision: decision(Ask, "unknown data must be reviewed and cannot be allowed", "data.categories."+category)}
+			}
+		}
 		return ScanResult{Decision: decision(Ask, "data category is unknown", "data.default")}
 	}
 	if rule, ok := matchingDataRule(path, category, policy); ok {
@@ -107,7 +117,7 @@ func ParseDataPolicy(raw map[string]any) (DataPolicy, error) {
 					return DataPolicy{}, errInvalidDataPolicy
 				}
 				outcome, ok := parseOutcome(rawDecision)
-				if !ok || category == "secret" && outcome != Deny || category == "unknown" && outcome != Ask {
+				if !ok || category == "secret" && outcome != Deny || category == "unknown" && outcome == Allow {
 					return DataPolicy{}, errInvalidDataPolicy
 				}
 				policy.CategoryDecisions[category] = outcome

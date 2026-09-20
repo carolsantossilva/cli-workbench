@@ -88,6 +88,19 @@ func TestParseDataPolicyValidatesKnownCategoriesAndProviderList(t *testing.T) {
 	}
 }
 
+func TestParseDataPolicyAllowsExplicitUnknownDeny(t *testing.T) {
+	policy, err := ParseDataPolicy(map[string]any{
+		"categories": map[string]any{"unknown": "deny"},
+	})
+	if err != nil {
+		t.Fatalf("ParseDataPolicy() error = %v", err)
+	}
+	result := ScanData("docs/notes.md", "ordinary text", "unknown", policy)
+	if result.Decision.Outcome != Deny || result.Decision.MatchedRule != "data.categories.unknown" {
+		t.Fatalf("decision = %#v, want explicit category deny", result.Decision)
+	}
+}
+
 func TestParseDataPolicyRejectsSecretAllowUnknownAllowAndUnknownFields(t *testing.T) {
 	for name, value := range map[string]map[string]any{
 		"secret allow":  {"categories": map[string]any{"secret": "allow"}},
