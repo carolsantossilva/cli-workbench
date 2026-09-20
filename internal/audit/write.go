@@ -187,6 +187,15 @@ func unsafeAuditPathMetadata(path string) bool {
 	if strings.Contains(lower, "-----begin") {
 		return true
 	}
+	if looksLikeCredentialHeader(lower) || strings.HasPrefix(strings.TrimSpace(lower), "bearer ") {
+		return true
+	}
+	// A filename with directories or an extension is valid metadata even if
+	// its name includes words such as "secret-value" or "private-key". Apply
+	// these loose marker checks only to a bare, extensionless value-like token.
+	if strings.Contains(path, "/") || filepath.Ext(path) != "" {
+		return false
+	}
 	tokens := strings.FieldsFunc(lower, func(r rune) bool {
 		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
 	})
@@ -206,6 +215,23 @@ func unsafeAuditPathMetadata(path string) bool {
 	}
 	for i := 0; i+2 < len(tokens); i++ {
 		if tokens[i] == "secret" && tokens[i+1] == "access" && tokens[i+2] == "key" {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeCredentialHeader(value string) bool {
+	separator := strings.IndexByte(value, ':')
+	if separator <= 0 || separator == len(value)-1 || strings.TrimSpace(value[separator+1:]) == "" {
+		return false
+	}
+	label := strings.FieldsFunc(value[:separator], func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
+	})
+	for _, token := range label {
+		switch token {
+		case "authorization", "password", "passwd", "secret", "token", "credential", "credentials":
 			return true
 		}
 	}

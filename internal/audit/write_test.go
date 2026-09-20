@@ -140,6 +140,7 @@ func TestAppendRejectsValueLikeAuditPathsWithoutPersistingThem(t *testing.T) {
 		{name: "credential assignment", value: "SERVICE_PASSWORD=fixture-private-value"},
 		{name: "secret-labeled value", value: "fixture-secret-value-must-not-appear"},
 		{name: "PEM marker", value: "-----BEGIN PRIVATE KEY-----"},
+		{name: "bearer credential", value: "Authorization: Bearer ghp_fixture_token_0123456789"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -156,6 +157,29 @@ func TestAppendRejectsValueLikeAuditPathsWithoutPersistingThem(t *testing.T) {
 			}
 			if _, err := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(err) {
 				t.Fatalf("rejected metadata created .station: stat error = %v", err)
+			}
+		})
+	}
+}
+
+func TestAppendPreservesSensitiveLookingFilenamesAsPaths(t *testing.T) {
+	for _, value := range []string{"docs/secret-value.md", "docs/private-key.md"} {
+		t.Run(value, func(t *testing.T) {
+			root := t.TempDir()
+			_, auditPath, err := Append(root, Event{
+				Kind:     KindPrepared,
+				Decision: DecisionAllow,
+				Paths:    []string{value},
+			})
+			if err != nil {
+				t.Fatalf("Append(valid path %q) error = %v", value, err)
+			}
+			encoded, err := os.ReadFile(auditPath)
+			if err != nil {
+				t.Fatalf("read audit record: %v", err)
+			}
+			if !bytes.Contains(encoded, []byte(value)) {
+				t.Fatalf("audit record omits valid path %q: %s", value, encoded)
 			}
 		})
 	}
