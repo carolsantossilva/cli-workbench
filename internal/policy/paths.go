@@ -112,6 +112,12 @@ func matchesAnyPath(patterns []string, value string) bool {
 	return false
 }
 
+// PathMatches reports whether a workspace-relative path matches any
+// slash-separated workspace pattern, using policy authorization semantics.
+func PathMatches(patterns []string, value string) bool {
+	return matchesAnyPath(patterns, value)
+}
+
 func matchPathPattern(pattern, value string) bool {
 	if !validPathPattern(pattern) || !validConcretePath(value) {
 		return false

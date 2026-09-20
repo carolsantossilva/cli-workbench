@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"station/internal/modes"
 	"station/internal/workflows"
 	"station/internal/workspace"
 )
@@ -27,6 +28,8 @@ type Result struct {
 	Code         string                    `json:"code"`
 	ExitCode     int                       `json:"exitCode"`
 	Diagnostics  []workspace.Diagnostic    `json:"diagnostics,omitempty"`
+	NewWorkspace *modes.NewResult          `json:"newWorkspace,omitempty"`
+	Inspection   *modes.ExistingInspection `json:"inspection,omitempty"`
 	WorkflowRun  *WorkflowRunOutput        `json:"workflowRun,omitempty"`
 	Verification *workflows.WorkflowResult `json:"verification,omitempty"`
 }
@@ -89,8 +92,8 @@ func newRootCommand(root string, format *string, result *Result, handled *bool) 
 		Version:       Version,
 	}
 	command.AddCommand(newValidateCommand(root, format, result, handled))
-	command.AddCommand(unavailableCommand("new <idea>", nil))
-	command.AddCommand(unavailableCommand("inspect [path]", nil))
+	command.AddCommand(newNewCommand(root, format, result, handled))
+	command.AddCommand(newInspectCommand(root, format, result, handled))
 	workflow := &cobra.Command{Use: "workflow", Short: "Prepare and verify workflows"}
 	workflow.PersistentFlags().StringVar(format, "format", "text", "Output format: text or json")
 	workflow.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
@@ -100,19 +103,6 @@ func newRootCommand(root string, format *string, result *Result, handled *bool) 
 	workflow.AddCommand(newWorkflowVerifyCommand(root, format, result, handled))
 	command.AddCommand(workflow)
 	return command
-}
-
-func unavailableCommand(use string, handled *bool) *cobra.Command {
-	return &cobra.Command{
-		Use:  use,
-		Args: cobra.ArbitraryArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if handled != nil {
-				*handled = true
-			}
-			return &Error{Code: CodePrerequisiteMissing, Status: "blocked", Message: "command is not available in phase 1"}
-		},
-	}
 }
 
 func failedResult(err error) Result {
