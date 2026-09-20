@@ -3,6 +3,7 @@ package workspace
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -84,6 +85,43 @@ func TestValidateWorkspaceUsesFullArrayIndexInDiagnosticPath(t *testing.T) {
 	diagnostics := validateWorkspace(manifest, root)
 	if got := diagnostics[10].Path; got != "/workflows/brainstorm/allowedCommands/10" {
 		t.Fatalf("diagnostics[10].Path = %q, want full array index", got)
+	}
+}
+
+func TestValidateWorkspaceDiagnosticsAreDeterministicallyOrdered(t *testing.T) {
+	manifest := &Workspace{
+		Workspace: Identity{Kind: "monorepo"},
+		Workflows: map[string]Workflow{
+			"zeta": {
+				AllowedCommands: []string{"missing-zeta"},
+				ReadPaths:       []string{"../outside-zeta"},
+				WritePaths:      []string{"../outside-write-zeta"},
+			},
+			"alpha": {
+				AllowedCommands: []string{"missing-alpha"},
+				ReadPaths:       []string{"../outside-alpha"},
+				WritePaths:      []string{"../outside-write-alpha"},
+			},
+		},
+	}
+	wantPaths := []string{
+		"/workflows/alpha/allowedCommands/0",
+		"/workflows/alpha/readPaths/0",
+		"/workflows/alpha/writePaths/0",
+		"/workflows/zeta/allowedCommands/0",
+		"/workflows/zeta/readPaths/0",
+		"/workflows/zeta/writePaths/0",
+	}
+
+	for i := 0; i < 100; i++ {
+		diagnostics := validateWorkspace(manifest, t.TempDir())
+		paths := make([]string, len(diagnostics))
+		for index, diagnostic := range diagnostics {
+			paths[index] = diagnostic.Path
+		}
+		if !reflect.DeepEqual(paths, wantPaths) {
+			t.Fatalf("iteration %d paths = %#v, want %#v", i, paths, wantPaths)
+		}
 	}
 }
 

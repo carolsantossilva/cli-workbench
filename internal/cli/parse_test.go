@@ -3,8 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -58,9 +60,84 @@ func TestRunCLIRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
+func TestRunCLIValidateJSONUsesActualCommandSyntax(t *testing.T) {
+	root := writeValidWorkspace(t)
+	var stdout, stderr bytes.Buffer
+
+	result := runCLI(context.Background(), []string{"validate", "--format", "json"}, Dependencies{Root: root, Stdout: &stdout, Stderr: &stderr})
+
+	if !result.OK || result.Status != "ready" || result.ExitCode != 0 {
+		t.Fatalf("result = %#v", result)
+	}
+	var output Result
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("stdout is not Result JSON: %q: %v", stdout.String(), err)
+	}
+	if !reflect.DeepEqual(output, result) || stderr.Len() != 0 {
+		t.Fatalf("output = %#v, result = %#v, stderr = %q", output, result, stderr.String())
+	}
+}
+
+func TestRunCLIValidateFailureEmitsJSONDiagnosticWithoutStderr(t *testing.T) {
+	root := writeWorkspaceFixture(t, "workspace.invalid.json")
+	var stdout, stderr bytes.Buffer
+
+	result := runCLI(context.Background(), []string{"validate", "--format", "json"}, Dependencies{Root: root, Stdout: &stdout, Stderr: &stderr})
+
+	if result.OK || result.Status != "invalid" || result.Code != string(CodeInvalid) || result.ExitCode != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+	var output Result
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("stdout is not Result JSON: %q: %v", stdout.String(), err)
+	}
+	if len(output.Diagnostics) != 1 || output.Diagnostics[0].Path != "/workspace/id" || output.Diagnostics[0].Severity != "error" || output.Diagnostics[0].Message == "" {
+		t.Fatalf("output diagnostics = %#v", output.Diagnostics)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty in JSON mode", stderr.String())
+	}
+}
+
+func TestRunCLIRejectsInvalidFormat(t *testing.T) {
+	root := writeValidWorkspace(t)
+	var stdout, stderr bytes.Buffer
+
+	result := runCLI(context.Background(), []string{"validate", "--format", "yaml"}, Dependencies{Root: root, Stdout: &stdout, Stderr: &stderr})
+
+	if result.OK || result.Status != "invalid" || result.Code != string(CodeInvalid) || result.ExitCode != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "invalid argument") {
+		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunCLIWorkflowChildInheritsJSONFormat(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	result := runCLI(context.Background(), []string{"workflow", "run", "build", "--format", "json"}, Dependencies{Stdout: &stdout, Stderr: &stderr})
+
+	if result.OK || result.Status != "blocked" || result.Code != string(CodePrerequisiteMissing) || result.ExitCode != 5 {
+		t.Fatalf("result = %#v", result)
+	}
+	var output Result
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("stdout is not Result JSON: %q: %v", stdout.String(), err)
+	}
+	if !reflect.DeepEqual(output, result) || stderr.Len() != 0 {
+		t.Fatalf("output = %#v, result = %#v, stderr = %q", output, result, stderr.String())
+	}
+}
+
 func writeValidWorkspace(t *testing.T) string {
 	t.Helper()
-	content, err := os.ReadFile(filepath.Join("..", "..", "testdata", "workspace.valid.json"))
+	return writeWorkspaceFixture(t, "workspace.valid.json")
+}
+
+func writeWorkspaceFixture(t *testing.T, name string) string {
+	t.Helper()
+	content, err := os.ReadFile(filepath.Join("..", "..", "testdata", name))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -40,25 +42,42 @@ func runCLI(ctx context.Context, argv []string, deps Dependencies) Result {
 		var err error
 		root, err = os.Getwd()
 		if err != nil {
-			return failedResult(invalidError("resolve current directory: %v", err), stderr)
+			cliErr := invalidError("resolve current directory: %v", err)
+			fmt.Fprintln(stderr, cliErr)
+			return failedResult(cliErr)
 		}
 	}
 
-	command := newRootCommand(root)
+	format := "text"
+	handled := false
+	result := Result{}
+	command := newRootCommand(root, &format, &result, &handled)
 	command.SetOut(stdout)
 	command.SetErr(stderr)
 	command.SetArgs(argv)
 	if err := command.ExecuteContext(ctx); err != nil {
-		return failedResult(err, stderr)
+		result = failedResult(err)
+		if format == "json" && handled {
+			writeResultJSON(stdout, result)
+		} else {
+			fmt.Fprintln(stderr, err)
+		}
+		return result
 	}
-	return Result{OK: true, Status: "ready", ExitCode: 0}
+	if result.Status == "" {
+		result = Result{OK: true, Status: "ready", ExitCode: 0}
+	}
+	if format == "json" && handled {
+		writeResultJSON(stdout, result)
+	}
+	return result
 }
 
 func Run(ctx context.Context, argv []string, deps Dependencies) Result {
 	return runCLI(ctx, argv, deps)
 }
 
-func newRootCommand(root string) *cobra.Command {
+func newRootCommand(root string, format *string, result *Result, handled *bool) *cobra.Command {
 	command := &cobra.Command{
 		Use:           "station",
 		Short:         "Station workspace contract CLI",
@@ -66,31 +85,65 @@ func newRootCommand(root string) *cobra.Command {
 		SilenceUsage:  true,
 		Version:       Version,
 	}
-	command.AddCommand(newValidateCommand(root))
-	command.AddCommand(unavailableCommand("new <idea>"))
-	command.AddCommand(unavailableCommand("inspect [path]"))
+	command.AddCommand(newValidateCommand(root, format, result, handled))
+	command.AddCommand(unavailableCommand("new <idea>", nil))
+	command.AddCommand(unavailableCommand("inspect [path]", nil))
 	workflow := &cobra.Command{Use: "workflow", Short: "Prepare and verify workflows"}
-	workflow.AddCommand(unavailableCommand("run <workflow-id>"))
-	workflow.AddCommand(unavailableCommand("verify <workflow-id> <run-id>"))
+	workflow.PersistentFlags().StringVar(format, "format", "text", "Output format: text or json")
+	workflow.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		return validateFormat(*format)
+	}
+	workflow.AddCommand(unavailableCommand("run <workflow-id>", handled))
+	workflow.AddCommand(unavailableCommand("verify <workflow-id> <run-id>", handled))
 	command.AddCommand(workflow)
 	return command
 }
 
-func unavailableCommand(use string) *cobra.Command {
+func unavailableCommand(use string, handled *bool) *cobra.Command {
 	return &cobra.Command{
 		Use:  use,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return &Error{Code: CodePrerequisiteMissing, Message: "command is not available in phase 1"}
+			if handled != nil {
+				*handled = true
+			}
+			return &Error{Code: CodePrerequisiteMissing, Status: "blocked", Message: "command is not available in phase 1"}
 		},
 	}
 }
 
-func failedResult(err error, stderr io.Writer) Result {
+func failedResult(err error) Result {
 	code := CodeInvalid
-	if typed, ok := err.(*Error); ok {
+	status := "invalid"
+	var diagnostics []workspace.Diagnostic
+	var typed *Error
+	if errors.As(err, &typed) {
 		code = typed.Code
+		if typed.Status != "" {
+			status = typed.Status
+		}
+		diagnostics = typed.Diagnostics
 	}
-	fmt.Fprintln(stderr, err)
-	return Result{Status: "invalid", Code: string(code), ExitCode: exitCode(code)}
+	if status == "invalid" {
+		switch code {
+		case CodeAsk:
+			status = "ask"
+		case CodeDeny, CodeArtifactMissing, CodePrerequisiteMissing:
+			status = "blocked"
+		}
+	}
+	return Result{Status: status, Code: string(code), ExitCode: exitCode(code), Diagnostics: diagnostics}
+}
+
+func validateFormat(format string) error {
+	if format != "text" && format != "json" {
+		return invalidError("invalid argument --format: %q (expected text or json)", format)
+	}
+	return nil
+}
+
+func writeResultJSON(w io.Writer, result Result) {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	_ = encoder.Encode(result)
 }

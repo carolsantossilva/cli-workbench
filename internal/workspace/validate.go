@@ -1,9 +1,13 @@
 package workspace
 
 import (
+	"errors"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 type Diagnostic struct {
@@ -41,7 +45,13 @@ func validateWorkspace(manifest *Workspace, root string) []Diagnostic {
 			diagnostics = append(diagnostics, invalid("/commands/"+itoa(i)+"/project", "command project does not exist"))
 		}
 	}
-	for id, workflow := range manifest.Workflows {
+	workflowIDs := make([]string, 0, len(manifest.Workflows))
+	for id := range manifest.Workflows {
+		workflowIDs = append(workflowIDs, id)
+	}
+	sort.Strings(workflowIDs)
+	for _, id := range workflowIDs {
+		workflow := manifest.Workflows[id]
 		for i, commandID := range workflow.AllowedCommands {
 			if _, exists := commandIDs[commandID]; !exists {
 				diagnostics = append(diagnostics, invalid("/workflows/"+id+"/allowedCommands/"+itoa(i), "workflow command does not exist"))
@@ -56,10 +66,19 @@ func validateWorkspace(manifest *Workspace, root string) []Diagnostic {
 				diagnostics = append(diagnostics, invalid("/workflows/"+id+"/requiredSkills/"+itoa(i), "required skill is not allowed"))
 			}
 		}
-		for field, paths := range map[string][]string{"readPaths": workflow.ReadPaths, "writePaths": workflow.WritePaths, "inputs": workflow.Inputs, "outputs": workflow.Outputs} {
-			for i, path := range paths {
+		pathFields := []struct {
+			name  string
+			paths []string
+		}{
+			{name: "readPaths", paths: workflow.ReadPaths},
+			{name: "writePaths", paths: workflow.WritePaths},
+			{name: "inputs", paths: workflow.Inputs},
+			{name: "outputs", paths: workflow.Outputs},
+		}
+		for _, field := range pathFields {
+			for i, path := range field.paths {
 				if !workspaceRelativePath(path) {
-					diagnostics = append(diagnostics, invalid("/workflows/"+id+"/"+field+"/"+itoa(i), "workflow path must be relative and remain inside the workspace"))
+					diagnostics = append(diagnostics, invalid("/workflows/"+id+"/"+field.name+"/"+itoa(i), "workflow path must be relative and remain inside the workspace"))
 				}
 			}
 		}
@@ -76,6 +95,24 @@ func validateWorkspace(manifest *Workspace, root string) []Diagnostic {
 
 func ValidateWorkspace(manifest *Workspace, root string) []Diagnostic {
 	return validateWorkspace(manifest, root)
+}
+
+func DiagnosticFromError(err error) Diagnostic {
+	var validationErr *jsonschema.ValidationError
+	if errors.As(err, &validationErr) {
+		output := validationErr.BasicOutput()
+		for _, unit := range output.Errors {
+			if unit.Error != nil {
+				return Diagnostic{Code: "invalid", Message: unit.Error.String(), Path: unit.InstanceLocation, Severity: "error"}
+			}
+		}
+		return Diagnostic{Code: "invalid", Message: err.Error(), Path: output.InstanceLocation, Severity: "error"}
+	}
+	path := "/"
+	if strings.Contains(err.Error(), "schemaVersion") {
+		path = "/schemaVersion"
+	}
+	return Diagnostic{Code: "invalid", Message: err.Error(), Path: path, Severity: "error"}
 }
 
 func invalid(path, message string) Diagnostic {

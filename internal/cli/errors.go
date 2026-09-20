@@ -1,6 +1,10 @@
 package cli
 
-import "fmt"
+import (
+	"fmt"
+
+	"station/internal/workspace"
+)
 
 type ErrorCode string
 
@@ -13,8 +17,10 @@ const (
 )
 
 type Error struct {
-	Code    ErrorCode
-	Message string
+	Code        ErrorCode
+	Status      string
+	Message     string
+	Diagnostics []workspace.Diagnostic
 }
 
 func (err *Error) Error() string { return err.Message }
@@ -33,5 +39,5 @@ func exitCode(code ErrorCode) int {
 }
 
 func invalidError(format string, args ...any) error {
-	return &Error{Code: CodeInvalid, Message: fmt.Sprintf(format, args...)}
+	return &Error{Code: CodeInvalid, Status: "invalid", Message: fmt.Sprintf(format, args...)}
 }
