@@ -504,15 +504,15 @@ Dependência: Fase 1.
     scanData(path, content, category string, policy DataPolicy) ScanResult
     appendAudit(root string, event AuditEvent) (eventID, path string, err error)
 
-- [ ] Escrever testes para cada regra do foco de revisão: traversal, symlink externo (incluindo symlink final com barra conforme advisory Go vigente), comando não declarado, ask, deny, segredo e repositório externo.
-- [ ] Rodar os testes e confirmar falhas por funções ausentes.
-- [ ] Implementar validação lexical de paths e fazer I/O da Station relativo a `os.Root` ancorado em workspace ou repo externo; rejeitar absoluto, `..`, symlink fora da raiz e qualquer escrita pela CLI na raiz externa. Não alegar isolamento de processos, mounts ou devices.
-- [ ] Implementar autorização por precedência e os três resultados allow/ask/deny; não usar booleano que confunda ask com allow.
-- [ ] Fazer `station validate` validar os contratos execution/data, referências de projeto/comando e regras secret/unknown antes de qualquer execução.
-- [ ] Implementar comando como { executable, args[] }, rejeitando string shell, argumentos não declarados e workflow sem permissão.
-- [ ] Implementar exclusão de `.env*` e detecção PEM redigida no pacote de contexto, retornando somente tipo/path/linha/hash; não implementar heurística ampla de token neste núcleo.
-- [ ] Implementar .station/audit.jsonl append-only, criando o diretório somente depois de uma decisão válida e nunca para manifestos inválidos.
-- [ ] Rodar `go test ./...`; usar fixtures que provem que o valor do segredo não aparece em stdout, stderr ou auditoria.
+- [x] Escrever testes para cada regra do foco de revisão: traversal, symlink externo (incluindo symlink final com barra conforme advisory Go vigente), comando não declarado, ask, deny, segredo e repositório externo.
+- [x] Rodar os testes e confirmar falhas por funções ausentes.
+- [x] Implementar validação lexical de paths e fazer I/O da Station relativo a `os.Root` ancorado em workspace ou repo externo; rejeitar absoluto, `..`, symlink fora da raiz e qualquer escrita pela CLI na raiz externa. Não alegar isolamento de processos, mounts ou devices.
+- [x] Implementar autorização por precedência e os três resultados allow/ask/deny; não usar booleano que confunda ask com allow.
+- [x] Fazer `station validate` validar os contratos execution/data, referências de projeto/comando e regras secret/unknown antes de qualquer execução.
+- [x] Implementar comando como { executable, args[] }, rejeitando string shell, argumentos não declarados e workflow sem permissão.
+- [x] Implementar exclusão de `.env*` e detecção PEM redigida no pacote de contexto, retornando somente tipo/path/linha/hash; não implementar heurística ampla de token neste núcleo.
+- [x] Implementar .station/audit.jsonl append-only, criando o diretório somente depois de uma decisão válida e nunca para manifestos inválidos.
+- [x] Rodar `go test ./...`; fixtures comprovam que o valor secreto não aparece no resultado serializado do scanner nem na auditoria. A verificação de stdout/stderr ficará junto à publicação do ContextPacket na Fase 3, pois a Fase 2 não imprime nem expõe conteúdo de arquivo.
 
 **Critério de conclusão:** operações próprias da CLI e comandos iniciados por ela recebem decisão explícita; nenhuma operação negada é iniciada pela CLI. Writes feitos diretamente por um host externo não são prevenidos, mas a diferença de snapshot é reportada quando observável.
 
