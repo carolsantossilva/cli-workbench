@@ -100,10 +100,10 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 		if len(workflow.RequiredSkills) != 0 || len(workflow.AllowedCommands) != 0 {
 			t.Errorf("workflow %q unexpectedly requires skills or allows commands: %#v", id, workflow)
 		}
-		if !reflect.DeepEqual(workflow.AllowedSkills, []string{"station-mobile", "station-web", "station-server"}) {
+		if !reflect.DeepEqual(workflow.AllowedSkills, []string{"station-mobile", "station-web", "station-server", "adr-authoring"}) {
 			t.Errorf("workflow %q allowedSkills = %#v", id, workflow.AllowedSkills)
 		}
-		if !reflect.DeepEqual(workflow.ReadPaths, []string{"docs/station/**"}) {
+		if !reflect.DeepEqual(workflow.ReadPaths, []string{"docs/station/**", ".agents/skills/adr-authoring/SKILL.md"}) {
 			t.Errorf("workflow %q readPaths = %#v", id, workflow.ReadPaths)
 		}
 		if !reflect.DeepEqual(workflow.WritePaths, workflow.Outputs) || len(workflow.Outputs) != 1 {
@@ -125,6 +125,7 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 		"docs/station/workflows/brainstorm.md", "docs/station/workflows/grill-me.md",
 		"docs/station/workflows/design.md", "docs/station/workflows/build.md", "docs/station/workflows/review.md",
 		".agents/skills/station-mobile/SKILL.md", ".agents/skills/station-web/SKILL.md", ".agents/skills/station-server/SKILL.md",
+		".agents/skills/adr-authoring/SKILL.md",
 	} {
 		if info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(name))); err != nil || !info.Mode().IsRegular() {
 			t.Errorf("expected generated regular file %s, info=%v err=%v", name, info, err)

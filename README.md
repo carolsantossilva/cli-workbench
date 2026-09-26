@@ -47,7 +47,7 @@ With `--command`, `workflow run` may execute a command only when its ID is decla
 
 ## Creating a workspace
 
-Run `station new` in an existing, empty destination directory. It refuses a non-empty directory and does not overwrite existing entries. It writes the idea, `workspace.json`, the embedded workspace schema, workflow instruction files, root and app-area README/AGENTS guidance, and the local Station skills. These are a contract and guidance scaffold, not application source code: no Expo/Vite or other project generator runs; no package manifests, dependencies, `node_modules`, Go module, shared package, or Git repository are created. In particular, the current `station new` command has no module-path flag or prompt and leaves out `apps/server/go.mod`.
+Run `station new` in an existing, empty destination directory. It refuses a non-empty directory and does not overwrite existing entries. It writes the idea, `workspace.json`, the embedded workspace schema, workflow instruction files, root and app-area README/AGENTS guidance, and local skills for the app areas and ADR authoring. These are a contract and guidance scaffold, not application source code: no Expo/Vite or other project generator runs; no package manifests, dependencies, `node_modules`, Go module, shared package, or Git repository are created. In particular, the current `station new` command has no module-path flag or prompt and leaves out `apps/server/go.mod`.
 
 Scaffold files are written one at a time. The scaffold API can emit `apps/server/go.mod` only when supplied an explicit module path, but `station new` currently has no option for that value and therefore omits the file. Choose a module path in an approved design rather than inventing a publishable path.
 

@@ -151,9 +151,9 @@ func newManifest(root string, design Design, policies Policy) workspace.Workspac
 	for _, stage := range workflowStages {
 		configuration := workspace.Workflow{
 			RequiredSkills:  []string{},
-			AllowedSkills:   []string{"station-mobile", "station-web", "station-server"},
+			AllowedSkills:   []string{"station-mobile", "station-web", "station-server", "adr-authoring"},
 			AllowedCommands: []string{},
-			ReadPaths:       []string{"docs/station/**"},
+			ReadPaths:       []string{"docs/station/**", ".agents/skills/adr-authoring/SKILL.md"},
 			WritePaths:      []string{stage.output},
 			Inputs:          append([]string(nil), stage.inputs...),
 			Outputs:         []string{stage.output},
