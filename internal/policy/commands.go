@@ -4,7 +4,7 @@ import (
 	"path"
 	"strings"
 
-	"station/internal/workspace"
+	"workbench/internal/workspace"
 )
 
 type Command = workspace.Command

@@ -1,4 +1,4 @@
-// Package audit appends redacted Station event metadata to a workspace-local log.
+// Package audit appends redacted Workbench event metadata to a workspace-local log.
 package audit
 
 import (
@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const auditDirectory = ".station"
+const auditDirectory = ".workbench"
 const auditFilename = "audit.jsonl"
 
 type Decision string

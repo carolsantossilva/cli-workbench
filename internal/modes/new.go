@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"station/internal/scaffold"
+	"workbench/internal/scaffold"
 )
 
 type NewOptions struct {
@@ -48,7 +48,7 @@ func createNewWorkspace(root, idea string, options NewOptions) (NewResult, error
 	if len(content) == 0 || content[len(content)-1] != '\n' {
 		content = append(content, '\n')
 	}
-	file, err := rootHandle.OpenFile("docs/station/idea.md", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	file, err := rootHandle.OpenFile("docs/workbench/idea.md", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return NewResult{}, fmt.Errorf("write idea input: %w", err)
 	}
@@ -59,7 +59,7 @@ func createNewWorkspace(root, idea string, options NewOptions) (NewResult, error
 	if err := file.Close(); err != nil {
 		return NewResult{}, fmt.Errorf("close idea input: %w", err)
 	}
-	files := append(created.Files, "docs/station/idea.md")
+	files := append(created.Files, "docs/workbench/idea.md")
 	sort.Strings(files)
 	return NewResult{Root: absoluteRoot, WorkspaceID: created.WorkspaceID, Files: files}, nil
 }

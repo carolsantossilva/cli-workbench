@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"station/internal/cli"
-	"station/internal/modes"
+	"workbench/internal/cli"
+	"workbench/internal/modes"
 )
 
 func TestInspectWithoutManifestIsShallowReadOnlyAndDoesNotRunProjectCommands(t *testing.T) {
@@ -27,10 +27,10 @@ func TestInspectWithoutManifestIsShallowReadOnlyAndDoesNotRunProjectCommands(t *
 		Root: root, Stdout: &stdout, Stderr: &stderr,
 	})
 	if !result.OK || result.ExitCode != 0 {
-		t.Fatalf("station inspect failed: result=%#v stdout=%q stderr=%q", result, stdout.String(), stderr.String())
+		t.Fatalf("workbench inspect failed: result=%#v stdout=%q stderr=%q", result, stdout.String(), stderr.String())
 	}
 	if stderr.Len() != 0 {
-		t.Fatalf("station inspect wrote to stderr: %q", stderr.String())
+		t.Fatalf("workbench inspect wrote to stderr: %q", stderr.String())
 	}
 	var output map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
@@ -64,9 +64,9 @@ func TestInspectWithManifestLimitsEntriesToDeclaredReadPaths(t *testing.T) {
 		Root: root, Stdout: &stdout, Stderr: &stderr,
 	})
 	if !result.OK || result.ExitCode != 0 {
-		t.Fatalf("station inspect failed: result=%#v stdout=%q stderr=%q", result, stdout.String(), stderr.String())
+		t.Fatalf("workbench inspect failed: result=%#v stdout=%q stderr=%q", result, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "docs/station/idea.md") {
+	if !strings.Contains(stdout.String(), "docs/workbench/idea.md") {
 		t.Fatalf("inspection omitted a declared read path: %q", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "apps/web/src/private.ts") || strings.Contains(stdout.String(), "outside declared read scope") {
@@ -94,7 +94,7 @@ func TestInspectDoesNotFollowAllowlistedSymlinkOutsideWorkspace(t *testing.T) {
 		Root: root, Stdout: &stdout, Stderr: &stderr,
 	})
 	if !result.OK {
-		t.Fatalf("station inspect failed: result=%#v stdout=%q stderr=%q", result, stdout.String(), stderr.String())
+		t.Fatalf("workbench inspect failed: result=%#v stdout=%q stderr=%q", result, stdout.String(), stderr.String())
 	}
 	if strings.Contains(stdout.String(), secret) {
 		t.Fatalf("inspection followed an external symlink: %q", stdout.String())

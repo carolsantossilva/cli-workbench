@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"station/internal/cli"
-	"station/internal/workspace"
+	"workbench/internal/cli"
+	"workbench/internal/workspace"
 )
 
-func TestStationV1NewValidateAcceptanceDoesNotModifyItsSourceOrGenerateAnApp(t *testing.T) {
+func TestWorkbenchV1NewValidateAcceptanceDoesNotModifyItsSourceOrGenerateAnApp(t *testing.T) {
 	sourceRoot, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -22,9 +22,9 @@ func TestStationV1NewValidateAcceptanceDoesNotModifyItsSourceOrGenerateAnApp(t *
 
 	newResult, newStdout, newStderr := runCLI(t, workspaceRoot, "new", "uma ideia de aplicação")
 	if !newResult.OK || newResult.ExitCode != 0 || newStderr != "" {
-		t.Fatalf("station new result = %#v, stdout=%q, stderr=%q", newResult, newStdout, newStderr)
+		t.Fatalf("workbench new result = %#v, stdout=%q, stderr=%q", newResult, newStdout, newStderr)
 	}
-	if got, want := readAcceptanceFile(t, workspaceRoot, "docs/station/idea.md"), "uma ideia de aplicação\n"; got != want {
+	if got, want := readAcceptanceFile(t, workspaceRoot, "docs/workbench/idea.md"), "uma ideia de aplicação\n"; got != want {
 		t.Fatalf("stored idea = %q, want %q", got, want)
 	}
 	if _, err := workspace.LoadWorkspace(workspaceRoot); err != nil {
@@ -34,7 +34,7 @@ func TestStationV1NewValidateAcceptanceDoesNotModifyItsSourceOrGenerateAnApp(t *
 	for _, relative := range []string{
 		"workspace.json",
 		"schemas/workspace.schema.json",
-		"docs/station/idea.md",
+		"docs/workbench/idea.md",
 		"README.md",
 		"AGENTS.md",
 		"apps/mobile/README.md",
@@ -43,14 +43,14 @@ func TestStationV1NewValidateAcceptanceDoesNotModifyItsSourceOrGenerateAnApp(t *
 		"apps/web/AGENTS.md",
 		"apps/server/README.md",
 		"apps/server/AGENTS.md",
-		"docs/station/workflows/brainstorm.md",
-		"docs/station/workflows/grill-me.md",
-		"docs/station/workflows/design.md",
-		"docs/station/workflows/build.md",
-		"docs/station/workflows/review.md",
-		".agents/skills/station-mobile/SKILL.md",
-		".agents/skills/station-web/SKILL.md",
-		".agents/skills/station-server/SKILL.md",
+		"docs/workbench/workflows/brainstorm.md",
+		"docs/workbench/workflows/grill-me.md",
+		"docs/workbench/workflows/design.md",
+		"docs/workbench/workflows/build.md",
+		"docs/workbench/workflows/review.md",
+		".agents/skills/workbench-mobile/SKILL.md",
+		".agents/skills/workbench-web/SKILL.md",
+		".agents/skills/workbench-server/SKILL.md",
 	} {
 		info, err := os.Stat(filepath.Join(workspaceRoot, filepath.FromSlash(relative)))
 		if err != nil || !info.Mode().IsRegular() {
@@ -95,12 +95,12 @@ func TestStationV1NewValidateAcceptanceDoesNotModifyItsSourceOrGenerateAnApp(t *
 
 	validateResult, validateStdout, validateStderr := runCLI(t, workspaceRoot, "validate")
 	if !validateResult.OK || validateResult.ExitCode != 0 || validateStderr != "" {
-		t.Fatalf("station validate result = %#v, stdout=%q, stderr=%q", validateResult, validateStdout, validateStderr)
+		t.Fatalf("workbench validate result = %#v, stdout=%q, stderr=%q", validateResult, validateStdout, validateStderr)
 	}
 	if !strings.Contains(validateStdout, "valid") {
-		t.Fatalf("station validate did not confirm the manifest: %q", validateStdout)
+		t.Fatalf("workbench validate did not confirm the manifest: %q", validateStdout)
 	}
-	if _, err := os.Stat(filepath.Join(workspaceRoot, ".station")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(workspaceRoot, ".workbench")); !os.IsNotExist(err) {
 		t.Errorf("new/validate created runtime audit state unexpectedly: %v", err)
 	}
 	if got := acceptanceTreeSnapshot(t, sourceRoot); !equalAcceptanceSnapshots(got, sourceBefore) {

@@ -10,15 +10,15 @@ import (
 	"strings"
 	"testing"
 
-	"station/internal/workspace"
+	"workbench/internal/workspace"
 )
 
 func TestPrepareWorkflowBuildsAuditedContextWithoutPersistingInputContent(t *testing.T) {
 	root := t.TempDir()
-	manifest := workflowRunFixture([]string{"docs/station/idea.md"})
+	manifest := workflowRunFixture([]string{"docs/workbench/idea.md"})
 	inputContent := "A small shared calendar for families.\n"
-	writeTestFile(t, root, "docs/station/idea.md", []byte(inputContent))
-	writeTestFile(t, root, "docs/station/workflows/brainstorm.md", []byte("Brainstorm instruction v1."))
+	writeTestFile(t, root, "docs/workbench/idea.md", []byte(inputContent))
+	writeTestFile(t, root, "docs/workbench/workflows/brainstorm.md", []byte("Brainstorm instruction v1."))
 
 	packet, runID, err := prepareWorkflow(root, "brainstorm", Input{Manifest: manifest})
 	if err != nil {
@@ -27,13 +27,13 @@ func TestPrepareWorkflowBuildsAuditedContextWithoutPersistingInputContent(t *tes
 	if len(runID) != 36 || packet.WorkflowID != "brainstorm" || packet.WorkspaceRoot != root {
 		t.Fatalf("packet/runID = %#v / %q", packet, runID)
 	}
-	if packet.InstructionPath != "docs/station/workflows/brainstorm.md" || packet.Instruction != "Brainstorm instruction v1." {
+	if packet.InstructionPath != "docs/workbench/workflows/brainstorm.md" || packet.Instruction != "Brainstorm instruction v1." {
 		t.Fatalf("instruction = %#v", packet)
 	}
-	if packet.NextHandoff != "docs/station/brief.md" {
-		t.Fatalf("next handoff = %q, want docs/station/brief.md", packet.NextHandoff)
+	if packet.NextHandoff != "docs/workbench/brief.md" {
+		t.Fatalf("next handoff = %q, want docs/workbench/brief.md", packet.NextHandoff)
 	}
-	if len(packet.Inputs) != 1 || packet.Inputs[0].Path != "docs/station/idea.md" || packet.Inputs[0].Content != inputContent {
+	if len(packet.Inputs) != 1 || packet.Inputs[0].Path != "docs/workbench/idea.md" || packet.Inputs[0].Content != inputContent {
 		t.Fatalf("inputs = %#v, want the small approved input content", packet.Inputs)
 	}
 	packetJSON, err := json.Marshal(packet)
@@ -50,11 +50,11 @@ func TestPrepareWorkflowBuildsAuditedContextWithoutPersistingInputContent(t *tes
 	if packet.Inputs[0].SHA256 != hex.EncodeToString(wantHash[:]) || packet.Inputs[0].LineCount != 2 {
 		t.Fatalf("input metadata = %#v, want content hash and line count", packet.Inputs[0])
 	}
-	if len(packet.ExpectedOutputs) != 1 || packet.ExpectedOutputs[0].Path != "docs/station/brief.md" || packet.ExpectedOutputs[0].Exists {
+	if len(packet.ExpectedOutputs) != 1 || packet.ExpectedOutputs[0].Path != "docs/workbench/brief.md" || packet.ExpectedOutputs[0].Exists {
 		t.Fatalf("expected outputs = %#v, want brief.md pending", packet.ExpectedOutputs)
 	}
 
-	logBytes, err := os.ReadFile(filepath.Join(root, ".station", "audit.jsonl"))
+	logBytes, err := os.ReadFile(filepath.Join(root, ".workbench", "audit.jsonl"))
 	if err != nil {
 		t.Fatalf("read prepared audit: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestPrepareWorkflowBuildsAuditedContextWithoutPersistingInputContent(t *tes
 		t.Fatalf("prepared audit metadata = %#v", event)
 	}
 
-	statePath := filepath.Join(root, ".station", "runs", runID+".json")
+	statePath := filepath.Join(root, ".workbench", "runs", runID+".json")
 	stateBytes, err := os.ReadFile(statePath)
 	if err != nil {
 		t.Fatalf("read local run snapshot: %v", err)
@@ -77,15 +77,15 @@ func TestPrepareWorkflowBuildsAuditedContextWithoutPersistingInputContent(t *tes
 	if bytes.Contains(stateBytes, []byte(inputContent)) {
 		t.Fatal("local run snapshot persisted input content")
 	}
-	if !bytes.Contains(stateBytes, []byte("docs/station/idea.md")) {
+	if !bytes.Contains(stateBytes, []byte("docs/workbench/idea.md")) {
 		t.Fatal("local run snapshot omits declared input path")
 	}
 }
 
 func TestPrepareWorkflowPersistsHashesOnlyForDeclaredPaths(t *testing.T) {
 	root := t.TempDir()
-	inputPath := "docs/station/idea.md"
-	outputPath := "docs/station/brief.md"
+	inputPath := "docs/workbench/idea.md"
+	outputPath := "docs/workbench/brief.md"
 	outsidePath := "apps/web/notes.md"
 	inputContent := []byte("A design idea.\n")
 	outputContent := []byte("An existing brief.\n")
@@ -94,7 +94,7 @@ func TestPrepareWorkflowPersistsHashesOnlyForDeclaredPaths(t *testing.T) {
 	writeTestFile(t, root, inputPath, inputContent)
 	writeTestFile(t, root, outputPath, outputContent)
 	writeTestFile(t, root, outsidePath, outsideContent)
-	writeTestFile(t, root, "docs/station/workflows/brainstorm.md", []byte("instruction"))
+	writeTestFile(t, root, "docs/workbench/workflows/brainstorm.md", []byte("instruction"))
 
 	packet, runID, err := prepareWorkflow(root, "brainstorm", Input{Manifest: manifest})
 	if err != nil {
@@ -125,7 +125,7 @@ func TestPrepareWorkflowPersistsHashesOnlyForDeclaredPaths(t *testing.T) {
 		t.Fatalf("context warnings omit the Git path-name limitation: %#v", packet.Warnings)
 	}
 
-	stateBytes, err := os.ReadFile(filepath.Join(root, ".station", "runs", runID+".json"))
+	stateBytes, err := os.ReadFile(filepath.Join(root, ".workbench", "runs", runID+".json"))
 	if err != nil {
 		t.Fatalf("read persisted run state: %v", err)
 	}
@@ -136,15 +136,15 @@ func TestPrepareWorkflowPersistsHashesOnlyForDeclaredPaths(t *testing.T) {
 
 func TestPrepareWorkflowMissingRequiredInputDoesNotCreateAudit(t *testing.T) {
 	root := t.TempDir()
-	manifest := workflowRunFixture([]string{"docs/station/idea.md"})
-	writeTestFile(t, root, "docs/station/workflows/brainstorm.md", []byte("instruction"))
+	manifest := workflowRunFixture([]string{"docs/workbench/idea.md"})
+	writeTestFile(t, root, "docs/workbench/workflows/brainstorm.md", []byte("instruction"))
 
 	_, runID, err := prepareWorkflow(root, "brainstorm", Input{Manifest: manifest})
 	if err == nil || runID != "" {
 		t.Fatalf("prepareWorkflow() = runID %q, err %v; want missing input error before run", runID, err)
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(statErr) {
-		t.Fatalf("missing input created .station: %v", statErr)
+	if _, statErr := os.Stat(filepath.Join(root, ".workbench")); !os.IsNotExist(statErr) {
+		t.Fatalf("missing input created .workbench: %v", statErr)
 	}
 }
 
@@ -154,26 +154,26 @@ func TestPrepareWorkflowRejectsMissingOutputContractBeforeCreatingRun(t *testing
 	workflow := manifest.Workflows["brainstorm"]
 	workflow.Outputs = nil
 	manifest.Workflows["brainstorm"] = workflow
-	writeTestFile(t, root, "docs/station/workflows/brainstorm.md", []byte("instruction"))
+	writeTestFile(t, root, "docs/workbench/workflows/brainstorm.md", []byte("instruction"))
 
 	_, runID, err := PrepareWorkflow(root, "brainstorm", Input{Manifest: manifest})
 	assertWorkflowFailureCode(t, err, FailureInvalid)
 	if runID != "" {
 		t.Fatalf("run ID = %q, want no prepared run without outputs", runID)
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(statErr) {
-		t.Fatalf("missing output contract created Station state: %v", statErr)
+	if _, statErr := os.Stat(filepath.Join(root, ".workbench")); !os.IsNotExist(statErr) {
+		t.Fatalf("missing output contract created Workbench state: %v", statErr)
 	}
 }
 
 func TestPrepareWorkflowExcludesSecretAndPEMInputContents(t *testing.T) {
 	root := t.TempDir()
-	manifest := workflowRunFixture([]string{"docs/station/.env.local", "docs/station/key.pem"})
+	manifest := workflowRunFixture([]string{"docs/workbench/.env.local", "docs/workbench/key.pem"})
 	secret := "SERVICE_PASSWORD=fixture-private-value-must-not-appear"
 	pem := "-----BEGIN PRIVATE KEY-----\nfixture-pem-value-must-not-appear\n-----END PRIVATE KEY-----\n"
-	writeTestFile(t, root, "docs/station/.env.local", []byte(secret))
-	writeTestFile(t, root, "docs/station/key.pem", []byte(pem))
-	writeTestFile(t, root, "docs/station/workflows/brainstorm.md", []byte("instruction"))
+	writeTestFile(t, root, "docs/workbench/.env.local", []byte(secret))
+	writeTestFile(t, root, "docs/workbench/key.pem", []byte(pem))
+	writeTestFile(t, root, "docs/workbench/workflows/brainstorm.md", []byte("instruction"))
 
 	packet, runID, err := prepareWorkflow(root, "brainstorm", Input{Manifest: manifest})
 	if err != nil {
@@ -191,7 +191,7 @@ func TestPrepareWorkflowExcludesSecretAndPEMInputContents(t *testing.T) {
 			t.Fatalf("context packet leaked secret material %q", raw)
 		}
 	}
-	for _, path := range []string{"docs/station/.env.local", "docs/station/key.pem"} {
+	for _, path := range []string{"docs/workbench/.env.local", "docs/workbench/key.pem"} {
 		if !bytes.Contains(encoded, []byte(path)) {
 			t.Errorf("context packet omission metadata does not mention %q", path)
 		}
@@ -209,10 +209,10 @@ func TestPrepareWorkflowOmitsBinaryAndOversizedInputs(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
-			path := "docs/station/asset.bin"
+			path := "docs/workbench/asset.bin"
 			manifest := workflowRunFixture([]string{path})
 			writeTestFile(t, root, path, test.content)
-			writeTestFile(t, root, "docs/station/workflows/brainstorm.md", []byte("instruction"))
+			writeTestFile(t, root, "docs/workbench/workflows/brainstorm.md", []byte("instruction"))
 
 			packet, runID, err := prepareWorkflow(root, "brainstorm", Input{Manifest: manifest})
 			if err != nil {
@@ -228,13 +228,13 @@ func TestPrepareWorkflowOmitsBinaryAndOversizedInputs(t *testing.T) {
 func TestPrepareWorkflowOmitsInputSymlinkToEnvironmentFile(t *testing.T) {
 	root := t.TempDir()
 	secret := "SERVICE_PASSWORD=fixture-private-value-must-not-appear"
-	writeTestFile(t, root, "docs/station/.env.local", []byte(secret))
-	writeTestFile(t, root, "docs/station/workflows/brainstorm.md", []byte("safe instruction"))
-	if err := os.Symlink(".env.local", filepath.Join(root, "docs", "station", "idea.md")); err != nil {
+	writeTestFile(t, root, "docs/workbench/.env.local", []byte(secret))
+	writeTestFile(t, root, "docs/workbench/workflows/brainstorm.md", []byte("safe instruction"))
+	if err := os.Symlink(".env.local", filepath.Join(root, "docs", "workbench", "idea.md")); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 
-	packet, runID, err := prepareWorkflow(root, "brainstorm", Input{Manifest: workflowRunFixture([]string{"docs/station/idea.md"})})
+	packet, runID, err := prepareWorkflow(root, "brainstorm", Input{Manifest: workflowRunFixture([]string{"docs/workbench/idea.md"})})
 	if err != nil {
 		t.Fatalf("prepareWorkflow() error = %v", err)
 	}
@@ -253,8 +253,8 @@ func TestPrepareWorkflowOmitsInputSymlinkToEnvironmentFile(t *testing.T) {
 func TestPrepareWorkflowRejectsSymlinkedInstructionAndPEMInstruction(t *testing.T) {
 	t.Run("symlink to environment file", func(t *testing.T) {
 		root := t.TempDir()
-		writeTestFile(t, root, "docs/station/.env.local", []byte("SERVICE_PASSWORD=must-not-be-read"))
-		instruction := filepath.Join(root, "docs", "station", "workflows", "brainstorm.md")
+		writeTestFile(t, root, "docs/workbench/.env.local", []byte("SERVICE_PASSWORD=must-not-be-read"))
+		instruction := filepath.Join(root, "docs", "workbench", "workflows", "brainstorm.md")
 		if err := os.Symlink("../.env.local", instruction); err != nil {
 			t.Skipf("symlink unavailable: %v", err)
 		}
@@ -263,20 +263,20 @@ func TestPrepareWorkflowRejectsSymlinkedInstructionAndPEMInstruction(t *testing.
 		if runID != "" {
 			t.Fatalf("run ID = %q, want no prepared run", runID)
 		}
-		if _, err := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(err) {
-			t.Fatalf("rejected instruction symlink created Station state: %v", err)
+		if _, err := os.Stat(filepath.Join(root, ".workbench")); !os.IsNotExist(err) {
+			t.Fatalf("rejected instruction symlink created Workbench state: %v", err)
 		}
 	})
 	t.Run("PEM secret content", func(t *testing.T) {
 		root := t.TempDir()
-		writeTestFile(t, root, "docs/station/workflows/brainstorm.md", []byte("-----BEGIN PRIVATE KEY-----\nprivate data\n-----END PRIVATE KEY-----\n"))
+		writeTestFile(t, root, "docs/workbench/workflows/brainstorm.md", []byte("-----BEGIN PRIVATE KEY-----\nprivate data\n-----END PRIVATE KEY-----\n"))
 		_, runID, err := prepareWorkflow(root, "brainstorm", Input{Manifest: workflowRunFixture(nil)})
 		assertWorkflowFailureCode(t, err, FailureDeny)
 		if runID != "" {
 			t.Fatalf("run ID = %q, want no prepared run", runID)
 		}
-		if _, err := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(err) {
-			t.Fatalf("rejected secret instruction created Station state: %v", err)
+		if _, err := os.Stat(filepath.Join(root, ".workbench")); !os.IsNotExist(err) {
+			t.Fatalf("rejected secret instruction created Workbench state: %v", err)
 		}
 	})
 }
@@ -294,11 +294,11 @@ func workflowRunFixture(inputs []string) *workspace.Workspace {
 		},
 		Workflows: map[string]workspace.Workflow{
 			"brainstorm": {
-				ReadPaths:  []string{"docs/station/**"},
-				WritePaths: []string{"docs/station/**"},
+				ReadPaths:  []string{"docs/workbench/**"},
+				WritePaths: []string{"docs/workbench/**"},
 				Inputs:     inputs,
-				Outputs:    []string{"docs/station/brief.md"},
-				Handoff:    "docs/station/brief.md",
+				Outputs:    []string{"docs/workbench/brief.md"},
+				Handoff:    "docs/workbench/brief.md",
 			},
 		},
 		ExternalRepositories: []workspace.ExternalRepository{},

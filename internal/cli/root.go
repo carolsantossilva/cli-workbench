@@ -9,9 +9,9 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"station/internal/modes"
-	"station/internal/workflows"
-	"station/internal/workspace"
+	"workbench/internal/modes"
+	"workbench/internal/workflows"
+	"workbench/internal/workspace"
 )
 
 const Version = "0.1.0"
@@ -85,8 +85,8 @@ func Run(ctx context.Context, argv []string, deps Dependencies) Result {
 
 func newRootCommand(root string, format *string, result *Result, handled *bool) *cobra.Command {
 	command := &cobra.Command{
-		Use:           "station",
-		Short:         "Station workspace contract CLI",
+		Use:           "workbench",
+		Short:         "Workbench workspace contract CLI",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Version:       Version,

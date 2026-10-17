@@ -3,7 +3,7 @@ package workflows
 import (
 	"fmt"
 
-	"station/internal/workspace"
+	"workbench/internal/workspace"
 )
 
 // Definition is the versioned, static contract for a supported workflow.
@@ -37,35 +37,35 @@ type Resolved struct {
 var definitions = map[string]Definition{
 	"brainstorm": {
 		ID:              "brainstorm",
-		InstructionPath: "docs/station/workflows/brainstorm.md",
+		InstructionPath: "docs/workbench/workflows/brainstorm.md",
 		Responsibility:  "produzir entendimento compartilhado, critérios e limites",
-		OutputIdentity:  "docs/station/brief.md",
-		Handoff:         "docs/station/brief.md",
+		OutputIdentity:  "docs/workbench/brief.md",
+		Handoff:         "docs/workbench/brief.md",
 	},
 	"grill-me": {
 		ID:              "grill-me",
-		InstructionPath: "docs/station/workflows/grill-me.md",
+		InstructionPath: "docs/workbench/workflows/grill-me.md",
 		Responsibility:  "desafiar ambiguidades, premissas, riscos e casos extremos",
-		OutputIdentity:  "docs/station/decisions.md e design seguinte",
-		Handoff:         "docs/station/decisions.md",
+		OutputIdentity:  "docs/workbench/decisions.md e design seguinte",
+		Handoff:         "docs/workbench/decisions.md",
 	},
 	"design": {
 		ID:              "design",
-		InstructionPath: "docs/station/workflows/design.md",
+		InstructionPath: "docs/workbench/workflows/design.md",
 		Responsibility:  "registrar arquitetura, fluxo, erros, testes e decisões do próximo incremento",
-		OutputIdentity:  "docs/station/design.md",
-		Handoff:         "docs/station/design.md",
+		OutputIdentity:  "docs/workbench/design.md",
+		Handoff:         "docs/workbench/design.md",
 	},
 	"build": {
 		ID:              "build",
-		InstructionPath: "docs/station/workflows/build.md",
+		InstructionPath: "docs/workbench/workflows/build.md",
 		Responsibility:  "dividir execução em lotes, aplicar política e verificar diffs/testes",
-		OutputIdentity:  "docs/station/plan.md, arquivos do lote e resultados reais",
-		Handoff:         "docs/station/plan.md + paths alterados + design.md",
+		OutputIdentity:  "docs/workbench/plan.md, arquivos do lote e resultados reais",
+		Handoff:         "docs/workbench/plan.md + paths alterados + design.md",
 	},
 	"review": {
 		ID:              "review",
-		InstructionPath: "docs/station/workflows/review.md",
+		InstructionPath: "docs/workbench/workflows/review.md",
 		Responsibility:  "verificar aderência, segurança e políticas de dados",
 		OutputIdentity:  "resultado em decisions.md",
 		Handoff:         "snapshot/diff + testes + decisions.md",

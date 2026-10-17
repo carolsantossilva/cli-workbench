@@ -1,4 +1,4 @@
-# Station — Especificação inicial da V1
+# Workbench — Especificação inicial da V1
 
 Status: rascunho aprovado para documentação inicial
 Público principal: desenvolvedor individual
@@ -7,9 +7,9 @@ Prioridade: Codex-first
 
 ## 1. Visão
 
-A Station será uma CLI composta por workflows, skills e especificações para orientar um agente de IA na construção e evolução de software.
+A Workbench será uma CLI composta por workflows, skills e especificações para orientar um agente de IA na construção e evolução de software.
 
-Ela não será, na V1, uma IDE, um serviço de modelos ou uma plataforma com banco de dados próprio. O agente existente continua responsável por raciocinar, chamar ferramentas e executar as mudanças. A Station define como o trabalho deve ser conduzido, quais decisões precisam ser tomadas e quais artefatos devem ser produzidos.
+Ela não será, na V1, uma IDE, um serviço de modelos ou uma plataforma com banco de dados próprio. O agente existente continua responsável por raciocinar, chamar ferramentas e executar as mudanças. A Workbench define como o trabalho deve ser conduzido, quais decisões precisam ser tomadas e quais artefatos devem ser produzidos.
 
 O filesystem e o Git do próprio projeto são a fonte de verdade. Não haverá um Project Store separado.
 
@@ -33,34 +33,34 @@ ideia → brainstorm → grill-me → design aprovado → scaffold → testes/re
 
 A implementação de funcionalidades completas será adicionada gradualmente, em lotes definidos pelo workflow e controlados pelas políticas do workspace.
 
-### Projeto de validação da Station
+### Projeto de validação da Workbench
 
-O primeiro projeto construído pela Station será um app de tarefas/planner pessoal inspirado no Tiimo. Ele servirá como caso de dogfooding da Station.
+O primeiro projeto construído pela Workbench será um app de tarefas/planner pessoal inspirado no Tiimo. Ele servirá como caso de dogfooding da Workbench.
 
 O ponto de partida será uma ideia curta, por exemplo:
 
 > Quero criar um app de tarefas parecido com o Tiimo.
 
-A Station deverá usar seus próprios workflows de brainstorm, grill-me e design para descobrir requisitos, limites, arquitetura e critérios de aceite do app. Não haverá um contrato funcional detalhado definido antecipadamente para o projeto-alvo.
+A Workbench deverá usar seus próprios workflows de brainstorm, grill-me e design para descobrir requisitos, limites, arquitetura e critérios de aceite do app. Não haverá um contrato funcional detalhado definido antecipadamente para o projeto-alvo.
 
-A validação se concentrará na Station: execução correta dos workflows, produção dos artefatos, criação e evolução do `workspace.json`, scaffold do monorepo, execução local, testes e respeito às políticas. O app de tarefas não implementará os workflows da Station.
+A validação se concentrará na Workbench: execução correta dos workflows, produção dos artefatos, criação e evolução do `workspace.json`, scaffold do monorepo, execução local, testes e respeito às políticas. O app de tarefas não implementará os workflows da Workbench.
 
 ## 3. Modos de entrada
 
 ### Projeto novo
 
-`station:new` inicia um projeto a partir de uma ideia, conduz a descoberta e prepara o scaffold inicial de React Native/Expo, aplicação web React e servidor Go em um monorepo.
+`workbench:new` inicia um projeto a partir de uma ideia, conduz a descoberta e prepara o scaffold inicial de React Native/Expo, aplicação web React e servidor Go em um monorepo.
 
 ### Repositório existente
 
-`station:existing` começa pela leitura da estrutura, convenções e estado do monorepo. Na V1, esse modo terá escopo mais limitado: análise, planejamento e pequenas alterações controladas.
+`workbench:existing` começa pela leitura da estrutura, convenções e estado do monorepo. Na V1, esse modo terá escopo mais limitado: análise, planejamento e pequenas alterações controladas.
 
 Ambos os modos convergem para os mesmos workflows de design, construção e revisão.
 
 ## 4. Workflows da V1
 
 ```text
-station:new ou station:existing
+workbench:new ou workbench:existing
         ↓
 brainstorm
         ↓
@@ -101,17 +101,17 @@ Os artefatos são arquivos legíveis no próprio repositório:
 
 ```text
 workspace.json
-docs/station/brief.md
-docs/station/design.md
-docs/station/decisions.md
-docs/station/plan.md
+docs/workbench/brief.md
+docs/workbench/design.md
+docs/workbench/decisions.md
+docs/workbench/plan.md
 ```
 
 Esses arquivos substituem qualquer estado interno de projeto. O histórico do Git registra a evolução do código e dos documentos.
 
 ### Workspace manifest
 
-O `workspace.json` é o contrato versionado da Station para o workspace. Ele deve conter, no mínimo:
+O `workspace.json` é o contrato versionado da Workbench para o workspace. Ele deve conter, no mínimo:
 
 - `schemaVersion`;
 - identidade do workspace e tipo de estrutura (`monorepo` na V1);
@@ -123,7 +123,7 @@ O `workspace.json` é o contrato versionado da Station para o workspace. Ele dev
 
 O monorepo é o repositório principal. Repositórios externos são read-only por padrão e só podem ser alterados por uma política explícita.
 
-O manifesto não armazena estado transitório de sessões, logs ou histórico de execução. Ele descreve a composição e as regras evolutivas do workspace; o filesystem, o Git e os artefatos da Station guardam o restante.
+O manifesto não armazena estado transitório de sessões, logs ou histórico de execução. Ele descreve a composição e as regras evolutivas do workspace; o filesystem, o Git e os artefatos da Workbench guardam o restante.
 
 ## 6. Protocolo de contexto
 
@@ -168,11 +168,11 @@ As políticas devem permitir pelo menos três resultados para uma ação: permit
 
 Leitura, edição local e testes podem ser executados automaticamente quando estiverem dentro da política. Push, PR, deploy, alterações em sistemas externos e escrita em repositórios externos devem seguir as regras de mudanças externas do manifesto. Repositórios externos são read-only por padrão.
 
-Skills fornecem orientação, mas não são uma garantia técnica por si só. Quando o host do agente permitir, a Station deverá complementar as regras com comandos, hooks ou verificações determinísticas locais.
+Skills fornecem orientação, mas não são uma garantia técnica por si só. Quando o host do agente permitir, a Workbench deverá complementar as regras com comandos, hooks ou verificações determinísticas locais.
 
 ## 8. Princípios de execução
 
-- A Station tem uma CLI própria; não haverá interface gráfica própria.
+- A Workbench tem uma CLI própria; não haverá interface gráfica própria.
 - Codex-first; o formato inicial deve aproveitar diretamente skills e workflows do Codex.
 - Sem chamadas próprias a modelos ou APIs de IA.
 - Sem banco de dados interno ou Project Store.

@@ -17,8 +17,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"station/internal/policy"
-	"station/internal/workspace"
+	"workbench/internal/policy"
+	"workbench/internal/workspace"
 )
 
 const maxSnapshotScanBytes = 1 << 20
@@ -514,7 +514,7 @@ func hasSnapshotWildcard(value string) bool {
 func excludedContextPath(value string) bool {
 	for _, segment := range strings.Split(path.Clean(value), "/") {
 		switch segment {
-		case ".station", ".git", "node_modules", ".cache", "cache", "__pycache__", ".pytest_cache", ".mypy_cache", ".turbo", ".expo":
+		case ".workbench", ".git", "node_modules", ".cache", "cache", "__pycache__", ".pytest_cache", ".mypy_cache", ".turbo", ".expo":
 			return true
 		}
 	}

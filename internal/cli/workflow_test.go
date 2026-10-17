@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"station/internal/workspace"
+	"workbench/internal/workspace"
 )
 
 func TestWorkflowRunJSONIncludesPreparedContextAndRunID(t *testing.T) {
@@ -34,7 +34,7 @@ func TestWorkflowRunJSONIncludesPreparedContextAndRunID(t *testing.T) {
 		t.Fatalf("workflow context missing: %#v", run)
 	}
 	inputs, ok := packet["inputs"].([]any)
-	if !ok || len(inputs) != 1 || inputs[0].(map[string]any)["path"] != "docs/station/idea.md" {
+	if !ok || len(inputs) != 1 || inputs[0].(map[string]any)["path"] != "docs/workbench/idea.md" {
 		t.Fatalf("input metadata missing from prepared JSON: %#v", packet["inputs"])
 	}
 	if strings.Contains(stdout.String(), "fixture idea") {
@@ -53,7 +53,7 @@ func TestWorkflowRunTextIncludesInstructionsAndHandoff(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
 	result := runCLI(context.Background(), []string{"workflow", "run", "brainstorm"}, Dependencies{Root: root, Stdout: &stdout, Stderr: &stderr})
-	if !result.OK || !strings.Contains(stdout.String(), "Brainstorm fixture instruction") || !strings.Contains(stdout.String(), "fixture idea for the CLI workflow") || !strings.Contains(stdout.String(), "docs/station/brief.md") {
+	if !result.OK || !strings.Contains(stdout.String(), "Brainstorm fixture instruction") || !strings.Contains(stdout.String(), "fixture idea for the CLI workflow") || !strings.Contains(stdout.String(), "docs/workbench/brief.md") {
 		t.Fatalf("result=%#v stdout=%q stderr=%q", result, stdout.String(), stderr.String())
 	}
 	if stderr.Len() != 0 {
@@ -73,14 +73,14 @@ func TestWorkflowRunThenVerifyCompletesPreparedHandoff(t *testing.T) {
 		t.Fatalf("decode workflow run: %v", err)
 	}
 	runID := runResponse["workflowRun"].(map[string]any)["runId"].(string)
-	writeCLIWorkflowFile(t, root, "docs/station/brief.md", []byte("handed-off brief"))
+	writeCLIWorkflowFile(t, root, "docs/workbench/brief.md", []byte("handed-off brief"))
 
 	var verifyStdout, verifyStderr bytes.Buffer
 	verifyResult := runCLI(context.Background(), []string{"workflow", "verify", "brainstorm", runID, "--format", "json"}, Dependencies{Root: root, Stdout: &verifyStdout, Stderr: &verifyStderr})
 	if !verifyResult.OK || verifyResult.Status != "completed" || verifyResult.ExitCode != 0 {
 		t.Fatalf("workflow verify = %#v stdout=%q stderr=%q", verifyResult, verifyStdout.String(), verifyStderr.String())
 	}
-	if !strings.Contains(verifyStdout.String(), "docs/station/brief.md") || !strings.Contains(verifyStdout.String(), "completed") {
+	if !strings.Contains(verifyStdout.String(), "docs/workbench/brief.md") || !strings.Contains(verifyStdout.String(), "completed") {
 		t.Fatal("workflow verification JSON omitted output metadata or completion status")
 	}
 }
@@ -93,13 +93,13 @@ func TestWorkflowRunMissingInputReturnsArtifactMissingWithoutAudit(t *testing.T)
 	if result.OK || result.Status != "blocked" || result.Code != string(CodeArtifactMissing) || result.ExitCode != 5 {
 		t.Fatalf("result = %#v, stdout=%q stderr=%q", result, stdout.String(), stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, ".workbench")); !os.IsNotExist(err) {
 		t.Fatalf("failed preflight created audit state: %v", err)
 	}
 	if stderr.Len() != 0 || !strings.Contains(stdout.String(), "artifact-missing") {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Path != "docs/station/idea.md" {
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Path != "docs/workbench/idea.md" {
 		t.Fatalf("missing-input diagnostics = %#v", result.Diagnostics)
 	}
 }
@@ -120,16 +120,16 @@ func TestWorkflowCommandAskDoesNotStartProcess(t *testing.T) {
 	}
 	root := writeWorkflowWorkspace(t, true)
 	updateWorkflowManifest(t, root, func(manifest *workspace.Workspace) {
-		manifest.Projects = []workspace.Project{{ID: "local", Path: "docs/station", Kind: "server", Language: "go"}}
+		manifest.Projects = []workspace.Project{{ID: "local", Path: "docs/workbench", Kind: "server", Language: "go"}}
 		manifest.Commands = []workspace.Command{{ID: "write-sentinel", Category: "test", Executable: touch, Args: []string{"sentinel"}, Project: "local", TimeoutSeconds: 5}}
 	})
 	var stdout, stderr bytes.Buffer
 	result := runCLI(context.Background(), []string{"workflow", "run", "brainstorm", "--command", "write-sentinel", "--format", "json"}, Dependencies{Root: root, Stdout: &stdout, Stderr: &stderr})
 	if result.OK || result.Status != "ask" || result.ExitCode != 3 {
-		auditData, _ := os.ReadFile(filepath.Join(root, ".station", "audit.jsonl"))
+		auditData, _ := os.ReadFile(filepath.Join(root, ".workbench", "audit.jsonl"))
 		t.Fatalf("result = %#v stdout=%q stderr=%q audit=%q", result, stdout.String(), stderr.String(), auditData)
 	}
-	if _, err := os.Stat(filepath.Join(root, "docs", "station", "sentinel")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "docs", "workbench", "sentinel")); !os.IsNotExist(err) {
 		t.Fatalf("ask decision started command and created sentinel: %v", err)
 	}
 }
@@ -141,7 +141,7 @@ func TestWorkflowCommandNeverStartsShellEvenWhenListed(t *testing.T) {
 	}
 	root := writeWorkflowWorkspace(t, true)
 	updateWorkflowManifest(t, root, func(manifest *workspace.Workspace) {
-		manifest.Projects = []workspace.Project{{ID: "local", Path: "docs/station", Kind: "server", Language: "go"}}
+		manifest.Projects = []workspace.Project{{ID: "local", Path: "docs/workbench", Kind: "server", Language: "go"}}
 		manifest.Commands = []workspace.Command{{ID: "shell-write", Category: "test", Executable: shell, Args: []string{"-c", "touch sentinel"}, Project: "local", TimeoutSeconds: 5}}
 		workflow := manifest.Workflows["brainstorm"]
 		workflow.AllowedCommands = []string{"shell-write"}
@@ -152,7 +152,7 @@ func TestWorkflowCommandNeverStartsShellEvenWhenListed(t *testing.T) {
 	if result.OK || result.Status != "blocked" || result.Code != string(CodeDeny) || result.ExitCode != 4 {
 		t.Fatalf("result = %#v stdout=%q stderr=%q", result, stdout.String(), stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(root, "docs", "station", "sentinel")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "docs", "workbench", "sentinel")); !os.IsNotExist(err) {
 		t.Fatalf("shell command created a sentinel despite deny: %v", err)
 	}
 }
@@ -164,7 +164,7 @@ func TestWorkflowCommandRunsOnlyAllowedArgvAndAuditsHashes(t *testing.T) {
 	}
 	root := writeWorkflowWorkspace(t, true)
 	updateWorkflowManifest(t, root, func(manifest *workspace.Workspace) {
-		manifest.Projects = []workspace.Project{{ID: "local", Path: "docs/station", Kind: "server", Language: "go"}}
+		manifest.Projects = []workspace.Project{{ID: "local", Path: "docs/workbench", Kind: "server", Language: "go"}}
 		manifest.Commands = []workspace.Command{{ID: "fixture-output", Category: "test", Executable: printf, Args: []string{"fixture command output"}, Project: "local", TimeoutSeconds: 5}}
 		workflow := manifest.Workflows["brainstorm"]
 		workflow.AllowedCommands = []string{"fixture-output"}
@@ -179,7 +179,7 @@ func TestWorkflowCommandRunsOnlyAllowedArgvAndAuditsHashes(t *testing.T) {
 	if strings.Contains(stdout.String(), "fixture command output") || !strings.Contains(stdout.String(), "stdoutSha256") {
 		t.Fatalf("JSON must omit command output content but include its hash: %q", stdout.String())
 	}
-	auditData, err := os.ReadFile(filepath.Join(root, ".station", "audit.jsonl"))
+	auditData, err := os.ReadFile(filepath.Join(root, ".workbench", "audit.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestWorkflowCommandOmitsTerminalControlOutput(t *testing.T) {
 	}
 	root := writeWorkflowWorkspace(t, true)
 	updateWorkflowManifest(t, root, func(manifest *workspace.Workspace) {
-		manifest.Projects = []workspace.Project{{ID: "local", Path: "docs/station", Kind: "server", Language: "go"}}
+		manifest.Projects = []workspace.Project{{ID: "local", Path: "docs/workbench", Kind: "server", Language: "go"}}
 		manifest.Commands = []workspace.Command{{ID: "ansi-output", Category: "test", Executable: printf, Args: []string{"\x1b[2J"}, Project: "local", TimeoutSeconds: 5}}
 		workflow := manifest.Workflows["brainstorm"]
 		workflow.AllowedCommands = []string{"ansi-output"}
@@ -232,12 +232,12 @@ func writeWorkflowWorkspace(t *testing.T, includeInput bool) string {
 				RequiredSkills:  []string{},
 				AllowedSkills:   []string{},
 				AllowedCommands: []string{},
-				ReadPaths:       []string{"docs/station/**"},
-				WritePaths:      []string{"docs/station/**"},
-				Inputs:          []string{"docs/station/idea.md"},
-				Outputs:         []string{"docs/station/brief.md"},
+				ReadPaths:       []string{"docs/workbench/**"},
+				WritePaths:      []string{"docs/workbench/**"},
+				Inputs:          []string{"docs/workbench/idea.md"},
+				Outputs:         []string{"docs/workbench/brief.md"},
 				Summaries:       []string{},
-				Handoff:         "docs/station/brief.md",
+				Handoff:         "docs/workbench/brief.md",
 			},
 		},
 		ExternalRepositories: []workspace.ExternalRepository{},
@@ -247,9 +247,9 @@ func writeWorkflowWorkspace(t *testing.T, includeInput bool) string {
 		t.Fatal(err)
 	}
 	writeCLIWorkflowFile(t, root, "workspace.json", encoded)
-	writeCLIWorkflowFile(t, root, "docs/station/workflows/brainstorm.md", []byte("Brainstorm fixture instruction"))
+	writeCLIWorkflowFile(t, root, "docs/workbench/workflows/brainstorm.md", []byte("Brainstorm fixture instruction"))
 	if includeInput {
-		writeCLIWorkflowFile(t, root, "docs/station/idea.md", []byte("fixture idea for the CLI workflow"))
+		writeCLIWorkflowFile(t, root, "docs/workbench/idea.md", []byte("fixture idea for the CLI workflow"))
 	}
 	return root
 }

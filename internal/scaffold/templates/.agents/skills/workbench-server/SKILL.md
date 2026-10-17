@@ -1,9 +1,9 @@
 ---
-name: station-server
-description: Use when planning or changing the Go server project in this Station monorepo; verify the module/toolchain and keep changes within server ownership.
+name: workbench-server
+description: Use when planning or changing the Go server project in this Workbench monorepo; verify the module/toolchain and keep changes within server ownership.
 ---
 
-# Station server maintenance
+# Workbench server maintenance
 
 1. Read the root `AGENTS.md`, `apps/server/AGENTS.md`, and `workspace.json`.
 2. Inspect `go.mod`, `go.work`, and the installed Go version before relying on a module or toolchain. This scaffold intentionally has no `go.mod`; do not invent a module path.

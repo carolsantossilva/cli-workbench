@@ -12,9 +12,9 @@ import (
 func TestSnapshotWorkspaceCapturesDeclaredFileMetadata(t *testing.T) {
 	root := t.TempDir()
 	content := []byte("approved design input\n")
-	writeTestFile(t, root, "docs/station/brief.md", content)
+	writeTestFile(t, root, "docs/workbench/brief.md", content)
 
-	snapshot, err := snapshotWorkspace(root, []string{"docs/station/brief.md"})
+	snapshot, err := snapshotWorkspace(root, []string{"docs/workbench/brief.md"})
 	if err != nil {
 		t.Fatalf("snapshotWorkspace() error = %v", err)
 	}
@@ -26,13 +26,13 @@ func TestSnapshotWorkspaceCapturesDeclaredFileMetadata(t *testing.T) {
 	}
 	entry := snapshot.Entries[0]
 	wantHash := sha256.Sum256(content)
-	if entry.Path != "docs/station/brief.md" || !entry.Exists || entry.SHA256 != hex.EncodeToString(wantHash[:]) || entry.Bytes != int64(len(content)) || entry.ModifiedAt.IsZero() {
+	if entry.Path != "docs/workbench/brief.md" || !entry.Exists || entry.SHA256 != hex.EncodeToString(wantHash[:]) || entry.Bytes != int64(len(content)) || entry.ModifiedAt.IsZero() {
 		t.Fatalf("snapshot entry = %#v, want path, content hash, size and mtime", entry)
 	}
 }
 
 func TestSnapshotWorkspaceRepresentsMissingExactPath(t *testing.T) {
-	snapshot, err := snapshotWorkspace(t.TempDir(), []string{"docs/station/brief.md"})
+	snapshot, err := snapshotWorkspace(t.TempDir(), []string{"docs/workbench/brief.md"})
 	if err != nil {
 		t.Fatalf("snapshotWorkspace() error = %v", err)
 	}
@@ -40,33 +40,33 @@ func TestSnapshotWorkspaceRepresentsMissingExactPath(t *testing.T) {
 		t.Fatalf("snapshot entries = %#v, want one missing entry", snapshot.Entries)
 	}
 	entry := snapshot.Entries[0]
-	if entry.Path != "docs/station/brief.md" || entry.Exists || entry.SHA256 != "" || entry.Bytes != 0 {
+	if entry.Path != "docs/workbench/brief.md" || entry.Exists || entry.SHA256 != "" || entry.Bytes != 0 {
 		t.Fatalf("missing entry = %#v, want explicit absence", entry)
 	}
 }
 
 func TestSnapshotWorkspaceExpandsOnlyMatchingPattern(t *testing.T) {
 	root := t.TempDir()
-	writeTestFile(t, root, "docs/station/brief.md", []byte("brief"))
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("brief"))
 	writeTestFile(t, root, "apps/web/src/App.tsx", []byte("source"))
 
 	snapshot, err := snapshotWorkspace(root, []string{"docs/**"})
 	if err != nil {
 		t.Fatalf("snapshotWorkspace() error = %v", err)
 	}
-	if len(snapshot.Entries) != 1 || snapshot.Entries[0].Path != "docs/station/brief.md" {
-		t.Fatalf("snapshot entries = %#v, want only docs/station/brief.md", snapshot.Entries)
+	if len(snapshot.Entries) != 1 || snapshot.Entries[0].Path != "docs/workbench/brief.md" {
+		t.Fatalf("snapshot entries = %#v, want only docs/workbench/brief.md", snapshot.Entries)
 	}
 }
 
 func TestSnapshotWorkspaceExcludesSecretsCachesAndAudit(t *testing.T) {
 	root := t.TempDir()
-	writeTestFile(t, root, "docs/station/brief.md", []byte("safe\n"))
-	writeTestFile(t, root, "docs/station/.env.local", []byte("PASSWORD=fixture-private-value"))
-	writeTestFile(t, root, "docs/station/key.pem", []byte("-----BEGIN PRIVATE KEY-----\nfixture-private-value\n-----END PRIVATE KEY-----\n"))
-	writeTestFile(t, root, "docs/station/node_modules/pkg/index.ts", []byte("module contents"))
-	writeTestFile(t, root, "docs/station/.cache/context.json", []byte("cache contents"))
-	writeTestFile(t, root, ".station/audit.jsonl", []byte("prior audit data"))
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("safe\n"))
+	writeTestFile(t, root, "docs/workbench/.env.local", []byte("PASSWORD=fixture-private-value"))
+	writeTestFile(t, root, "docs/workbench/key.pem", []byte("-----BEGIN PRIVATE KEY-----\nfixture-private-value\n-----END PRIVATE KEY-----\n"))
+	writeTestFile(t, root, "docs/workbench/node_modules/pkg/index.ts", []byte("module contents"))
+	writeTestFile(t, root, "docs/workbench/.cache/context.json", []byte("cache contents"))
+	writeTestFile(t, root, ".workbench/audit.jsonl", []byte("prior audit data"))
 
 	snapshot, err := snapshotWorkspace(root, []string{"**"})
 	if err != nil {
@@ -77,17 +77,17 @@ func TestSnapshotWorkspaceExcludesSecretsCachesAndAudit(t *testing.T) {
 		got[entry.Path] = true
 	}
 	for _, excluded := range []string{
-		"docs/station/.env.local",
-		"docs/station/key.pem",
-		"docs/station/node_modules/pkg/index.ts",
-		"docs/station/.cache/context.json",
-		".station/audit.jsonl",
+		"docs/workbench/.env.local",
+		"docs/workbench/key.pem",
+		"docs/workbench/node_modules/pkg/index.ts",
+		"docs/workbench/.cache/context.json",
+		".workbench/audit.jsonl",
 	} {
 		if got[excluded] {
 			t.Errorf("snapshot includes excluded path %q", excluded)
 		}
 	}
-	if !got["docs/station/brief.md"] {
+	if !got["docs/workbench/brief.md"] {
 		t.Fatalf("snapshot omits the safe declared file: %#v", snapshot.Entries)
 	}
 }

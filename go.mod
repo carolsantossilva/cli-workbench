@@ -1,4 +1,4 @@
-module station
+module workbench
 
 go 1.26
 

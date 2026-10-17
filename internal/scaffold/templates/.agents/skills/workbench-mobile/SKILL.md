@@ -1,9 +1,9 @@
 ---
-name: station-mobile
-description: Use when planning or changing the mobile project in this Station monorepo; inspect its real toolchain and keep changes within mobile ownership.
+name: workbench-mobile
+description: Use when planning or changing the mobile project in this Workbench monorepo; inspect its real toolchain and keep changes within mobile ownership.
 ---
 
-# Station mobile maintenance
+# Workbench mobile maintenance
 
 1. Read the root `AGENTS.md`, `apps/mobile/AGENTS.md`, and `workspace.json`.
 2. Inspect the existing mobile files before assuming React Native, Expo, package-manager, or TypeScript versions. The scaffold does not install or prove any tool is available.

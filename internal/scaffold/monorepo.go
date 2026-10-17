@@ -11,10 +11,10 @@ import (
 	"sort"
 	"strings"
 
-	"station/internal/assets"
-	"station/internal/policy"
-	"station/internal/workflows"
-	"station/internal/workspace"
+	"workbench/internal/assets"
+	"workbench/internal/policy"
+	"workbench/internal/workflows"
+	"workbench/internal/workspace"
 )
 
 type Design struct {
@@ -36,11 +36,11 @@ var workflowStages = []struct {
 	inputs []string
 	output string
 }{
-	{id: "brainstorm", inputs: []string{"docs/station/idea.md"}, output: "docs/station/brief.md"},
-	{id: "grill-me", inputs: []string{"docs/station/brief.md"}, output: "docs/station/decisions.md"},
-	{id: "design", inputs: []string{"docs/station/brief.md", "docs/station/decisions.md"}, output: "docs/station/design.md"},
-	{id: "build", inputs: []string{"docs/station/design.md"}, output: "docs/station/plan.md"},
-	{id: "review", inputs: []string{"docs/station/decisions.md", "docs/station/design.md", "docs/station/plan.md"}, output: "docs/station/decisions.md"},
+	{id: "brainstorm", inputs: []string{"docs/workbench/idea.md"}, output: "docs/workbench/brief.md"},
+	{id: "grill-me", inputs: []string{"docs/workbench/brief.md"}, output: "docs/workbench/decisions.md"},
+	{id: "design", inputs: []string{"docs/workbench/brief.md", "docs/workbench/decisions.md"}, output: "docs/workbench/design.md"},
+	{id: "build", inputs: []string{"docs/workbench/design.md"}, output: "docs/workbench/plan.md"},
+	{id: "review", inputs: []string{"docs/workbench/decisions.md", "docs/workbench/design.md", "docs/workbench/plan.md"}, output: "docs/workbench/decisions.md"},
 }
 
 func DefaultPolicy() Policy {
@@ -151,9 +151,9 @@ func newManifest(root string, design Design, policies Policy) workspace.Workspac
 	for _, stage := range workflowStages {
 		configuration := workspace.Workflow{
 			RequiredSkills:  []string{},
-			AllowedSkills:   []string{"station-mobile", "station-web", "station-server", "adr-authoring"},
+			AllowedSkills:   []string{"workbench-mobile", "workbench-web", "workbench-server", "adr-authoring"},
 			AllowedCommands: []string{},
-			ReadPaths:       []string{"docs/station/**", ".agents/skills/adr-authoring/SKILL.md"},
+			ReadPaths:       []string{"docs/workbench/**", ".agents/skills/adr-authoring/SKILL.md"},
 			WritePaths:      []string{stage.output},
 			Inputs:          append([]string(nil), stage.inputs...),
 			Outputs:         []string{stage.output},

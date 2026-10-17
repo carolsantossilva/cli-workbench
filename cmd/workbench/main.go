@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"station/internal/cli"
+	"workbench/internal/cli"
 )
 
 func main() {
