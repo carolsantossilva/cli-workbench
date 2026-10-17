@@ -33,7 +33,7 @@ func TestRunCLIShowsVersion(t *testing.T) {
 	var stdout bytes.Buffer
 	result := runCLI(context.Background(), []string{"--version"}, Dependencies{Stdout: &stdout})
 
-	if !result.OK || !strings.Contains(stdout.String(), "station") {
+	if !result.OK || !strings.Contains(stdout.String(), "workbench") {
 		t.Fatalf("result = %#v, stdout = %q", result, stdout.String())
 	}
 }
@@ -55,8 +55,8 @@ func TestRunCLIValidatesManifestWithoutWriting(t *testing.T) {
 	if !result.OK || result.ExitCode != 0 || !strings.Contains(stdout.String(), "valid") {
 		t.Fatalf("result = %#v, stdout = %q", result, stdout.String())
 	}
-	if _, err := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(err) {
-		t.Fatalf("validate created .station: %v", err)
+	if _, err := os.Stat(filepath.Join(root, ".workbench")); !os.IsNotExist(err) {
+		t.Fatalf("validate created .workbench: %v", err)
 	}
 }
 

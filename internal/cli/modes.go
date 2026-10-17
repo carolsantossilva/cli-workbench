@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"station/internal/modes"
+	"workbench/internal/modes"
 )
 
 func newNewCommand(root string, _ *string, result *Result, handled *bool) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "new <idea>",
-		Short: "Create a minimal Station workspace in the current directory",
+		Short: "Create a minimal Workbench workspace in the current directory",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			*handled = true
@@ -66,7 +66,7 @@ func modeCLIError(err error) error {
 }
 
 func writeNewText(writer io.Writer, result modes.NewResult) {
-	fmt.Fprintf(writer, "Station workspace created at %s\n", result.Root)
+	fmt.Fprintf(writer, "Workbench workspace created at %s\n", result.Root)
 	fmt.Fprintln(writer, "Created files:")
 	for _, file := range result.Files {
 		fmt.Fprintf(writer, "- %s\n", file)

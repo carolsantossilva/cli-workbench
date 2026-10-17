@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"station/internal/workspace"
+	"workbench/internal/workspace"
 )
 
 func TestResolveReturnsApprovedWorkflowDefinitions(t *testing.T) {
@@ -17,26 +17,26 @@ func TestResolveReturnsApprovedWorkflowDefinitions(t *testing.T) {
 		{
 			id:             "brainstorm",
 			responsibility: "produzir entendimento compartilhado, critérios e limites",
-			outputIdentity: "docs/station/brief.md",
-			handoff:        "docs/station/brief.md",
+			outputIdentity: "docs/workbench/brief.md",
+			handoff:        "docs/workbench/brief.md",
 		},
 		{
 			id:             "grill-me",
 			responsibility: "desafiar ambiguidades, premissas, riscos e casos extremos",
-			outputIdentity: "docs/station/decisions.md e design seguinte",
-			handoff:        "docs/station/decisions.md",
+			outputIdentity: "docs/workbench/decisions.md e design seguinte",
+			handoff:        "docs/workbench/decisions.md",
 		},
 		{
 			id:             "design",
 			responsibility: "registrar arquitetura, fluxo, erros, testes e decisões do próximo incremento",
-			outputIdentity: "docs/station/design.md",
-			handoff:        "docs/station/design.md",
+			outputIdentity: "docs/workbench/design.md",
+			handoff:        "docs/workbench/design.md",
 		},
 		{
 			id:             "build",
 			responsibility: "dividir execução em lotes, aplicar política e verificar diffs/testes",
-			outputIdentity: "docs/station/plan.md, arquivos do lote e resultados reais",
-			handoff:        "docs/station/plan.md + paths alterados + design.md",
+			outputIdentity: "docs/workbench/plan.md, arquivos do lote e resultados reais",
+			handoff:        "docs/workbench/plan.md + paths alterados + design.md",
 		},
 		{
 			id:             "review",
@@ -59,7 +59,7 @@ func TestResolveReturnsApprovedWorkflowDefinitions(t *testing.T) {
 			if resolved.Definition.ID != test.id {
 				t.Errorf("definition ID = %q, want %q", resolved.Definition.ID, test.id)
 			}
-			if resolved.Definition.InstructionPath != "docs/station/workflows/"+test.id+".md" {
+			if resolved.Definition.InstructionPath != "docs/workbench/workflows/"+test.id+".md" {
 				t.Errorf("instruction path = %q", resolved.Definition.InstructionPath)
 			}
 			if resolved.Definition.Responsibility != test.responsibility {
@@ -77,15 +77,15 @@ func TestResolveReturnsApprovedWorkflowDefinitions(t *testing.T) {
 
 func TestResolveCopiesManifestWorkflowConfiguration(t *testing.T) {
 	source := workspace.Workflow{
-		RequiredSkills:  []string{"station-web"},
-		AllowedSkills:   []string{"station-web", "station-server"},
+		RequiredSkills:  []string{"workbench-web"},
+		AllowedSkills:   []string{"workbench-web", "workbench-server"},
 		AllowedCommands: []string{"web.test"},
 		ReadPaths:       []string{"apps/web"},
 		WritePaths:      []string{"apps/web/src"},
-		Inputs:          []string{"docs/station/design.md"},
+		Inputs:          []string{"docs/workbench/design.md"},
 		Outputs:         []string{"apps/web/src/App.tsx"},
 		Summaries:       []string{"git.diff"},
-		Handoff:         "docs/station/review-input.md",
+		Handoff:         "docs/workbench/review-input.md",
 	}
 	manifest := &workspace.Workspace{Workflows: map[string]workspace.Workflow{"build": source}}
 
@@ -94,15 +94,15 @@ func TestResolveCopiesManifestWorkflowConfiguration(t *testing.T) {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
 	want := Configuration{
-		RequiredSkills:  []string{"station-web"},
-		AllowedSkills:   []string{"station-web", "station-server"},
+		RequiredSkills:  []string{"workbench-web"},
+		AllowedSkills:   []string{"workbench-web", "workbench-server"},
 		AllowedCommands: []string{"web.test"},
 		ReadPaths:       []string{"apps/web"},
 		WritePaths:      []string{"apps/web/src"},
-		Inputs:          []string{"docs/station/design.md"},
+		Inputs:          []string{"docs/workbench/design.md"},
 		Outputs:         []string{"apps/web/src/App.tsx"},
 		Summaries:       []string{"git.diff"},
-		Handoff:         "docs/station/review-input.md",
+		Handoff:         "docs/workbench/review-input.md",
 	}
 	if !reflect.DeepEqual(resolved.Configuration, want) {
 		t.Fatalf("configuration = %#v, want %#v", resolved.Configuration, want)
@@ -150,7 +150,7 @@ func TestResolveRejectsInvalidWorkflowRequests(t *testing.T) {
 			name: "required skill is not allowed",
 			id:   "build",
 			manifest: &workspace.Workspace{Workflows: map[string]workspace.Workflow{
-				"build": {RequiredSkills: []string{"station-web"}, AllowedSkills: []string{"station-server"}},
+				"build": {RequiredSkills: []string{"workbench-web"}, AllowedSkills: []string{"workbench-server"}},
 			}},
 		},
 	}

@@ -18,10 +18,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
-	"station/internal/audit"
-	"station/internal/policy"
-	"station/internal/workflows"
-	"station/internal/workspace"
+	"workbench/internal/audit"
+	"workbench/internal/policy"
+	"workbench/internal/workflows"
+	"workbench/internal/workspace"
 )
 
 const maxCommandOutputBytes = 64 << 10
@@ -156,7 +156,7 @@ func executeWorkflowCommand(ctx context.Context, root, workflowID, runID, comman
 		Kind: audit.KindCommand, Decision: auditDecision(decision.Outcome), RunID: runID,
 		Workflow: workflowID, CommandID: commandID, Paths: paths,
 	}); err != nil {
-		return nil, workflowCLIError(&workflows.WorkflowError{Code: workflows.FailurePrerequisiteMissing, Path: ".station/audit.jsonl", Message: "could not audit command authorization"})
+		return nil, workflowCLIError(&workflows.WorkflowError{Code: workflows.FailurePrerequisiteMissing, Path: ".workbench/audit.jsonl", Message: "could not audit command authorization"})
 	}
 	if decision.Outcome != policy.Allow {
 		code := workflows.FailureDeny
@@ -243,7 +243,7 @@ func executeWorkflowCommand(ctx context.Context, root, workflowID, runID, comman
 		Kind: audit.KindCommand, Decision: audit.DecisionAllow, RunID: runID, Workflow: workflowID, CommandID: commandID,
 		Paths: paths, Categories: []string{"test-output"}, Hashes: hashes,
 	}); err != nil {
-		return nil, workflowCLIError(&workflows.WorkflowError{Code: workflows.FailurePrerequisiteMissing, Path: ".station/audit.jsonl", Message: "command completed but its result could not be audited"})
+		return nil, workflowCLIError(&workflows.WorkflowError{Code: workflows.FailurePrerequisiteMissing, Path: ".workbench/audit.jsonl", Message: "command completed but its result could not be audited"})
 	}
 	return output, nil
 }

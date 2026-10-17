@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"station/internal/workspace"
+	"workbench/internal/workspace"
 )
 
 type ErrorCode string

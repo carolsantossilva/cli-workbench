@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"station/internal/policy"
-	"station/internal/workspace"
+	"workbench/internal/policy"
+	"workbench/internal/workspace"
 )
 
 func newValidateCommand(root string, format *string, result *Result, handled *bool) *cobra.Command {

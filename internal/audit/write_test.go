@@ -140,10 +140,10 @@ func TestAppendRejectsInvalidOrUndecidedEventWithoutCreatingAuditDirectory(t *te
 			if strings.Contains(err.Error(), rawSecret) {
 				t.Fatal("validation error leaked raw input")
 			}
-			if _, err := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(err) {
-				t.Fatalf("invalid event created .station: stat error = %v", err)
+			if _, err := os.Stat(filepath.Join(root, ".workbench")); !os.IsNotExist(err) {
+				t.Fatalf("invalid event created .workbench: stat error = %v", err)
 			}
-			if _, err := os.Stat(filepath.Join(root, ".station", "audit.jsonl")); !os.IsNotExist(err) {
+			if _, err := os.Stat(filepath.Join(root, ".workbench", "audit.jsonl")); !os.IsNotExist(err) {
 				t.Fatalf("invalid event created audit file: stat error = %v", err)
 			}
 		})
@@ -173,8 +173,8 @@ func TestAppendRejectsValueLikeAuditPathsWithoutPersistingThem(t *testing.T) {
 			if strings.Contains(err.Error(), test.value) {
 				t.Fatal("validation error leaked rejected audit metadata")
 			}
-			if _, err := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(err) {
-				t.Fatalf("rejected metadata created .station: stat error = %v", err)
+			if _, err := os.Stat(filepath.Join(root, ".workbench")); !os.IsNotExist(err) {
+				t.Fatalf("rejected metadata created .workbench: stat error = %v", err)
 			}
 		})
 	}
@@ -210,23 +210,23 @@ func TestAppendRejectsEmptyRootWithoutWritingToWorkingDirectory(t *testing.T) {
 	if _, _, err := Append("", Event{Kind: KindDecision, Decision: DecisionAllow}); err == nil {
 		t.Fatal("Append with an empty root succeeded")
 	}
-	if _, err := os.Stat(filepath.Join(workingDirectory, ".station")); !os.IsNotExist(err) {
-		t.Fatalf("empty root created .station in the working directory: stat error = %v", err)
+	if _, err := os.Stat(filepath.Join(workingDirectory, ".workbench")); !os.IsNotExist(err) {
+		t.Fatalf("empty root created .workbench in the working directory: stat error = %v", err)
 	}
 }
 
 func TestAppendRejectsSymlinkEscapes(t *testing.T) {
 	validEvent := Event{Kind: KindDecision, Decision: DecisionAllow}
 
-	t.Run("station directory", func(t *testing.T) {
+	t.Run("workbench directory", func(t *testing.T) {
 		root := t.TempDir()
 		outside := t.TempDir()
-		if err := os.Symlink(outside, filepath.Join(root, ".station")); err != nil {
-			t.Fatalf("create .station symlink: %v", err)
+		if err := os.Symlink(outside, filepath.Join(root, ".workbench")); err != nil {
+			t.Fatalf("create .workbench symlink: %v", err)
 		}
 
 		if _, _, err := Append(root, validEvent); err == nil {
-			t.Fatal("Append through escaping .station symlink succeeded")
+			t.Fatal("Append through escaping .workbench symlink succeeded")
 		}
 		if _, err := os.Stat(filepath.Join(outside, "audit.jsonl")); !os.IsNotExist(err) {
 			t.Fatalf("outside audit file was created: stat error = %v", err)
@@ -239,10 +239,10 @@ func TestAppendRejectsSymlinkEscapes(t *testing.T) {
 		if err := os.WriteFile(outside, []byte("leave-this-file-alone\n"), 0o600); err != nil {
 			t.Fatalf("create outside sentinel: %v", err)
 		}
-		if err := os.Mkdir(filepath.Join(root, ".station"), 0o700); err != nil {
-			t.Fatalf("create .station: %v", err)
+		if err := os.Mkdir(filepath.Join(root, ".workbench"), 0o700); err != nil {
+			t.Fatalf("create .workbench: %v", err)
 		}
-		if err := os.Symlink(outside, filepath.Join(root, ".station", "audit.jsonl")); err != nil {
+		if err := os.Symlink(outside, filepath.Join(root, ".workbench", "audit.jsonl")); err != nil {
 			t.Fatalf("create audit symlink: %v", err)
 		}
 

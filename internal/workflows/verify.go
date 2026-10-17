@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"station/internal/audit"
-	"station/internal/policy"
-	"station/internal/workspace"
+	"workbench/internal/audit"
+	"workbench/internal/policy"
+	"workbench/internal/workspace"
 )
 
 const maxAuditRecordBytes = 1 << 20
@@ -40,21 +40,21 @@ func VerifyWorkflow(root, workflowID, runID string) (WorkflowResult, error) {
 	releaseLock, err := acquireVerificationLock(absoluteRoot, runID)
 	if err != nil {
 		if errors.Is(err, errVerificationInProgress) {
-			return WorkflowResult{}, workflowFailure(FailureAsk, ".station/runs/"+runID+".verify-lock", "workflow verification is already in progress or a prior attempt left a stale lock")
+			return WorkflowResult{}, workflowFailure(FailureAsk, ".workbench/runs/"+runID+".verify-lock", "workflow verification is already in progress or a prior attempt left a stale lock")
 		}
-		return WorkflowResult{}, workflowFailure(FailurePrerequisiteMissing, ".station/runs", "could not safely acquire workflow verification lock")
+		return WorkflowResult{}, workflowFailure(FailurePrerequisiteMissing, ".workbench/runs", "could not safely acquire workflow verification lock")
 	}
 	defer releaseLock()
 
 	state, err := readRunState(absoluteRoot, runID)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return WorkflowResult{}, workflowFailure(FailurePrerequisiteMissing, ".station/runs", "prepared workflow run state is missing")
+			return WorkflowResult{}, workflowFailure(FailurePrerequisiteMissing, ".workbench/runs", "prepared workflow run state is missing")
 		}
-		return WorkflowResult{}, workflowFailure(FailureDeny, ".station/runs", "prepared workflow run state is not safely readable")
+		return WorkflowResult{}, workflowFailure(FailureDeny, ".workbench/runs", "prepared workflow run state is not safely readable")
 	}
 	if !validRunStateForVerification(state, workflowID, runID) {
-		return WorkflowResult{}, workflowFailure(FailureInvalid, ".station/runs", "prepared workflow run metadata does not match the requested workflow")
+		return WorkflowResult{}, workflowFailure(FailureInvalid, ".workbench/runs", "prepared workflow run metadata does not match the requested workflow")
 	}
 
 	if err := validateWorkspaceManifestFile(absoluteRoot); err != nil {
@@ -84,20 +84,20 @@ func VerifyWorkflow(root, workflowID, runID string) (WorkflowResult, error) {
 
 	records, err := readAuditLog(absoluteRoot)
 	if err != nil {
-		return WorkflowResult{}, workflowFailure(FailureDeny, ".station/audit.jsonl", "workflow audit log is malformed or not safely readable")
+		return WorkflowResult{}, workflowFailure(FailureDeny, ".workbench/audit.jsonl", "workflow audit log is malformed or not safely readable")
 	}
 	prepared, completed, err := findRunAuditEvents(records, state, workflowID, runID)
 	if err != nil {
 		return WorkflowResult{}, err
 	}
 	if completed {
-		return WorkflowResult{}, workflowFailure(FailureInvalid, ".station/audit.jsonl", "workflow run has already been completed")
+		return WorkflowResult{}, workflowFailure(FailureInvalid, ".workbench/audit.jsonl", "workflow run has already been completed")
 	}
 	if prepared == nil {
-		return WorkflowResult{}, workflowFailure(FailurePrerequisiteMissing, ".station/audit.jsonl", "prepared workflow audit event is missing")
+		return WorkflowResult{}, workflowFailure(FailurePrerequisiteMissing, ".workbench/audit.jsonl", "prepared workflow audit event is missing")
 	}
 	if !snapshotHashesMatchPreparedEvent(state.Snapshot, resolved.Configuration, prepared.Event) {
-		return WorkflowResult{}, workflowFailure(FailureInvalid, ".station/runs", "prepared workflow snapshot hashes do not match prepared audit metadata")
+		return WorkflowResult{}, workflowFailure(FailureInvalid, ".workbench/runs", "prepared workflow snapshot hashes do not match prepared audit metadata")
 	}
 
 	paths := workflowSnapshotPaths(resolved.Configuration)
@@ -139,7 +139,7 @@ func VerifyWorkflow(root, workflowID, runID string) (WorkflowResult, error) {
 		RelatedEventID: state.PreparedEventID,
 	})
 	if err != nil {
-		return WorkflowResult{}, workflowFailure(FailurePrerequisiteMissing, ".station/audit.jsonl", "could not append workflow completion audit event")
+		return WorkflowResult{}, workflowFailure(FailurePrerequisiteMissing, ".workbench/audit.jsonl", "could not append workflow completion audit event")
 	}
 
 	result := WorkflowResult{
@@ -151,7 +151,7 @@ func VerifyWorkflow(root, workflowID, runID string) (WorkflowResult, error) {
 	}
 	if len(outOfScope) > 0 {
 		result.Warnings = []string{
-			"Observed changes outside workflow write paths are reported, not prevented by Station.",
+			"Observed changes outside workflow write paths are reported, not prevented by Workbench.",
 			"Filesystem edits preserving both size and modification time may be missed without Git evidence. Git path-name evidence may not distinguish edits to paths already changed at preparation.",
 		}
 	}
@@ -293,14 +293,14 @@ func readAuditLog(root string) ([]auditLogRecord, error) {
 	}
 	defer workspaceRoot.Close()
 
-	directoryInfo, err := workspaceRoot.Lstat(".station")
+	directoryInfo, err := workspaceRoot.Lstat(".workbench")
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil || directoryInfo.Mode()&os.ModeSymlink != 0 || !directoryInfo.IsDir() {
 		return nil, errors.New("audit directory is not a regular directory")
 	}
-	directoryRoot, err := workspaceRoot.OpenRoot(".station")
+	directoryRoot, err := workspaceRoot.OpenRoot(".workbench")
 	if err != nil {
 		return nil, errors.New("could not open audit directory")
 	}
@@ -500,13 +500,13 @@ func findRunAuditEvents(records []auditLogRecord, state runState, workflowID, ru
 		}
 		if record.Event.Kind == audit.KindPrepared && record.Event.RunID == runID {
 			if record.EventID != state.PreparedEventID || record.Event.Workflow != workflowID || record.Event.Decision != audit.DecisionAllow || prepared != nil {
-				return nil, false, workflowFailure(FailureDeny, ".station/audit.jsonl", "prepared workflow audit metadata is inconsistent")
+				return nil, false, workflowFailure(FailureDeny, ".workbench/audit.jsonl", "prepared workflow audit metadata is inconsistent")
 			}
 			prepared = record
 		}
 		if record.EventID == state.PreparedEventID {
 			if record.Event.Kind != audit.KindPrepared || record.Event.RunID != runID || record.Event.Workflow != workflowID || record.Event.Decision != audit.DecisionAllow {
-				return nil, false, workflowFailure(FailureDeny, ".station/audit.jsonl", "prepared workflow audit metadata is inconsistent")
+				return nil, false, workflowFailure(FailureDeny, ".workbench/audit.jsonl", "prepared workflow audit metadata is inconsistent")
 			}
 		}
 	}

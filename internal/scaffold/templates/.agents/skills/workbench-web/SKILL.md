@@ -1,9 +1,9 @@
 ---
-name: station-web
-description: Use when planning or changing the web project in this Station monorepo; inspect its real toolchain and keep changes within web ownership.
+name: workbench-web
+description: Use when planning or changing the web project in this Workbench monorepo; inspect its real toolchain and keep changes within web ownership.
 ---
 
-# Station web maintenance
+# Workbench web maintenance
 
 1. Read the root `AGENTS.md`, `apps/web/AGENTS.md`, and `workspace.json`.
 2. Inspect existing manifests and source before assuming React, a bundler, package manager, or TypeScript version. The scaffold does not install or prove any tool is available.

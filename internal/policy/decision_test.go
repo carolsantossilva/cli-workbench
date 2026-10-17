@@ -3,7 +3,7 @@ package policy
 import (
 	"testing"
 
-	"station/internal/workspace"
+	"workbench/internal/workspace"
 )
 
 func TestAuthorizeUsesMostSpecificRuleAndBlocksSecrets(t *testing.T) {
@@ -165,9 +165,9 @@ func TestAuthorizeRejectsUnknownProjectAndPathOutsideProject(t *testing.T) {
 	}
 }
 
-func TestAuthorizeExcludesStationAuditTree(t *testing.T) {
+func TestAuthorizeExcludesWorkbenchAuditTree(t *testing.T) {
 	manifest := policyFixture()
-	decision := authorize(Action{Kind: ActionRead, Path: ".station/audit.jsonl"}, manifest, "build")
+	decision := authorize(Action{Kind: ActionRead, Path: ".workbench/audit.jsonl"}, manifest, "build")
 	if decision.Outcome != Deny {
 		t.Fatalf("audit read = %q, want deny", decision.Outcome)
 	}

@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"station/internal/audit"
-	"station/internal/policy"
-	"station/internal/workspace"
+	"workbench/internal/audit"
+	"workbench/internal/policy"
+	"workbench/internal/workspace"
 )
 
 type FailureCode string
@@ -130,7 +130,7 @@ func prepareWorkflow(root, id string, input Input) (ContextPacket, string, error
 		Hashes:     auditHashes,
 	})
 	if err != nil {
-		return ContextPacket{}, "", workflowFailure(FailurePrerequisiteMissing, ".station/audit.jsonl", "could not append prepared workflow audit event")
+		return ContextPacket{}, "", workflowFailure(FailurePrerequisiteMissing, ".workbench/audit.jsonl", "could not append prepared workflow audit event")
 	}
 	state := runState{
 		Version:         1,
@@ -143,7 +143,7 @@ func prepareWorkflow(root, id string, input Input) (ContextPacket, string, error
 		CreatedAt:       time.Now().UTC(),
 	}
 	if err := writeRunState(absoluteRoot, state); err != nil {
-		return ContextPacket{}, "", workflowFailure(FailurePrerequisiteMissing, ".station/runs", "could not persist the prepared workflow snapshot")
+		return ContextPacket{}, "", workflowFailure(FailurePrerequisiteMissing, ".workbench/runs", "could not persist the prepared workflow snapshot")
 	}
 
 	nextHandoff := resolved.Configuration.Handoff
@@ -165,7 +165,7 @@ func prepareWorkflow(root, id string, input Input) (ContextPacket, string, error
 		NextHandoff:     nextHandoff,
 		Omissions:       omissions,
 		Warnings: []string{
-			"Station does not control host tools; observed changes do not prove prevention of external writes.",
+			"Workbench does not control host tools; observed changes do not prove prevention of external writes.",
 			"Out-of-scope filesystem metadata uses path, existence, size, and modification time only; edits preserving both size and modification time may be missed without Git evidence. Git path-name evidence may not distinguish edits to paths already changed at preparation. Secret, environment, binary, symlink, and cache contents are not persisted in snapshots.",
 		},
 	}
@@ -488,7 +488,7 @@ func dataCategoryForPath(manifest *workspace.Workspace, value string) string {
 	if isEnvironmentPath(value) {
 		return "secret"
 	}
-	if value == "docs/station" || strings.HasPrefix(value, "docs/station/") {
+	if value == "docs/workbench" || strings.HasPrefix(value, "docs/workbench/") {
 		return "design"
 	}
 	for _, project := range manifest.Projects {

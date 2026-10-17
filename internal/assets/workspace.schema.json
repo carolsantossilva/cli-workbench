@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "station://workspace.schema.json",
-  "title": "Station workspace manifest v1",
+  "$id": "workbench://workspace.schema.json",
+  "title": "Workbench workspace manifest v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "workspace", "projects", "commands", "policies", "workflows", "externalRepositories"],

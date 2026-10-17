@@ -8,10 +8,10 @@ import (
 	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
-	"station/internal/assets"
+	"workbench/internal/assets"
 )
 
-const schemaURL = "station://workspace.schema.json"
+const schemaURL = "workbench://workspace.schema.json"
 
 type Workspace struct {
 	SchemaVersion        int                  `json:"schemaVersion"`

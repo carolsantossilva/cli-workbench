@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"station/internal/audit"
-	"station/internal/workspace"
+	"workbench/internal/audit"
+	"workbench/internal/workspace"
 )
 
 func TestVerifyWorkflowRecordsOutputMetadataAndPreparedHandoff(t *testing.T) {
 	root, runID := prepareVerificationFixture(t)
 	output := []byte("brief contents must not be persisted\n")
-	writeTestFile(t, root, "docs/station/brief.md", output)
+	writeTestFile(t, root, "docs/workbench/brief.md", output)
 
 	result, err := VerifyWorkflow(root, "brainstorm", runID)
 	if err != nil {
@@ -31,7 +31,7 @@ func TestVerifyWorkflowRecordsOutputMetadataAndPreparedHandoff(t *testing.T) {
 	}
 	wantHashBytes := sha256.Sum256(output)
 	wantHash := hex.EncodeToString(wantHashBytes[:])
-	if len(result.Outputs) != 1 || result.Outputs[0].Path != "docs/station/brief.md" || result.Outputs[0].HashAfter != wantHash || result.Outputs[0].Status != "complete" {
+	if len(result.Outputs) != 1 || result.Outputs[0].Path != "docs/workbench/brief.md" || result.Outputs[0].HashAfter != wantHash || result.Outputs[0].Status != "complete" {
 		t.Fatalf("outputs = %#v, want verified output hash %s", result.Outputs, wantHash)
 	}
 
@@ -46,7 +46,7 @@ func TestVerifyWorkflowRecordsOutputMetadataAndPreparedHandoff(t *testing.T) {
 	if completed.Event.RelatedEventID != prepared.EventID || completed.Event.RunID != runID || completed.Event.Workflow != "brainstorm" {
 		t.Fatalf("completion audit does not link to prepared run: %#v", completed)
 	}
-	if len(completed.Event.Paths) != 1 || completed.Event.Paths[0] != "docs/station/brief.md" || len(completed.Event.Hashes) != 1 || completed.Event.Hashes[0] != wantHash {
+	if len(completed.Event.Paths) != 1 || completed.Event.Paths[0] != "docs/workbench/brief.md" || len(completed.Event.Hashes) != 1 || completed.Event.Hashes[0] != wantHash {
 		t.Fatalf("completion audit metadata = %#v", completed.Event)
 	}
 	if bytes.Contains(logBytes, output) {
@@ -70,8 +70,8 @@ func TestVerifyWorkflowAcceptsLiteralDirectoryReadPathWithPreparedHash(t *testin
 	declaredPath := "apps/web/src/main.go"
 	declaredContent := []byte("package web\n")
 	writeTestFile(t, root, declaredPath, declaredContent)
-	runID := prepareVerificationRunWithReadPaths(t, root, []string{"apps/web", "docs/station/workflows/brainstorm.md"})
-	writeTestFile(t, root, "docs/station/brief.md", []byte("verified output\n"))
+	runID := prepareVerificationRunWithReadPaths(t, root, []string{"apps/web", "docs/workbench/workflows/brainstorm.md"})
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("verified output\n"))
 
 	result, err := VerifyWorkflow(root, "brainstorm", runID)
 	if err != nil {
@@ -104,7 +104,7 @@ func TestVerifyWorkflowAcceptsLiteralDirectoryReadPathWithPreparedHash(t *testin
 
 func TestVerifyWorkflowRejectsAlteredDeclaredSnapshotHashWithoutCompletingRun(t *testing.T) {
 	root := t.TempDir()
-	declaredPath := "docs/station/idea.md"
+	declaredPath := "docs/workbench/idea.md"
 	writeTestFile(t, root, declaredPath, []byte("declared read input\n"))
 	runID := prepareVerificationRun(t, root)
 
@@ -130,11 +130,11 @@ func TestVerifyWorkflowRejectsAlteredDeclaredSnapshotHashWithoutCompletingRun(t 
 	if err != nil {
 		t.Fatalf("encode altered run state: %v", err)
 	}
-	statePath := filepath.Join(root, ".station", "runs", runID+".json")
+	statePath := filepath.Join(root, ".workbench", "runs", runID+".json")
 	if err := os.WriteFile(statePath, stateBytes, 0o600); err != nil {
 		t.Fatalf("persist altered run state: %v", err)
 	}
-	writeTestFile(t, root, "docs/station/brief.md", []byte("verified output\n"))
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("verified output\n"))
 
 	_, err = VerifyWorkflow(root, "brainstorm", runID)
 	assertWorkflowFailureCode(t, err, FailureInvalid)
@@ -160,8 +160,8 @@ func TestVerifyWorkflowRejectsInvalidRunIDWithoutCreatingState(t *testing.T) {
 
 	_, err := VerifyWorkflow(root, "brainstorm", "not-a-run-id")
 	assertWorkflowFailureCode(t, err, FailureInvalid)
-	if _, statErr := os.Stat(filepath.Join(root, ".station")); !os.IsNotExist(statErr) {
-		t.Fatalf("invalid run ID created Station state: %v", statErr)
+	if _, statErr := os.Stat(filepath.Join(root, ".workbench")); !os.IsNotExist(statErr) {
+		t.Fatalf("invalid run ID created Workbench state: %v", statErr)
 	}
 }
 
@@ -178,7 +178,7 @@ func TestVerifyWorkflowReportsObservableChangesOutsideWritePaths(t *testing.T) {
 	if !ok || entry.SHA256 != "" || entry.Bytes != int64(len("old note\n")) || entry.ModifiedAt.IsZero() {
 		t.Fatalf("out-of-scope baseline entry = %#v, want metadata and no content hash", entry)
 	}
-	writeTestFile(t, root, "docs/station/brief.md", []byte("verified brief\n"))
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("verified brief\n"))
 	writeTestFile(t, root, path, []byte("new note\n"))
 	changedAt := time.Now().Add(2 * time.Hour)
 	if err := os.Chtimes(filepath.Join(root, filepath.FromSlash(path)), changedAt, changedAt); err != nil {
@@ -200,7 +200,7 @@ func TestVerifyWorkflowReportsObservableChangesOutsideWritePaths(t *testing.T) {
 func TestVerifyWorkflowReportsNewBinaryPathWithoutSnapshottingItsContents(t *testing.T) {
 	root := t.TempDir()
 	runID := prepareVerificationRun(t, root)
-	writeTestFile(t, root, "docs/station/brief.md", []byte("verified brief\n"))
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("verified brief\n"))
 	writeTestFile(t, root, "apps/web/image.bin", []byte{0x00, 0xff, 0x11})
 
 	result, err := VerifyWorkflow(root, "brainstorm", runID)
@@ -214,7 +214,7 @@ func TestVerifyWorkflowReportsNewBinaryPathWithoutSnapshottingItsContents(t *tes
 
 func TestVerifyWorkflowRejectsReusingCompletedRun(t *testing.T) {
 	root, runID := prepareVerificationFixture(t)
-	writeTestFile(t, root, "docs/station/brief.md", []byte("brief\n"))
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("brief\n"))
 	if _, err := VerifyWorkflow(root, "brainstorm", runID); err != nil {
 		t.Fatalf("first VerifyWorkflow() error = %v", err)
 	}
@@ -249,9 +249,9 @@ func TestVerificationLockSerializesTheSameRun(t *testing.T) {
 
 func TestVerifyWorkflowRejectsMalformedAuditWithoutExposingRecord(t *testing.T) {
 	root, runID := prepareVerificationFixture(t)
-	writeTestFile(t, root, "docs/station/brief.md", []byte("brief\n"))
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("brief\n"))
 	const sentinel = "private-value-in-malformed-audit-record"
-	auditPath := filepath.Join(root, ".station", "audit.jsonl")
+	auditPath := filepath.Join(root, ".workbench", "audit.jsonl")
 	file, err := os.OpenFile(auditPath, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		t.Fatalf("open audit log: %v", err)
@@ -282,7 +282,7 @@ func TestVerifyWorkflowRejectsMalformedAuditWithoutExposingRecord(t *testing.T) 
 
 func TestVerifyWorkflowRejectsUnsafeAuditPathMetadata(t *testing.T) {
 	root, runID := prepareVerificationFixture(t)
-	writeTestFile(t, root, "docs/station/brief.md", []byte("brief\n"))
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("brief\n"))
 	const unsafePath = "Authorization: fixture-private-value"
 	record := verificationAuditRecord{
 		EventID:   "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -297,7 +297,7 @@ func TestVerifyWorkflowRejectsUnsafeAuditPathMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode unsafe fixture audit record: %v", err)
 	}
-	auditPath := filepath.Join(root, ".station", "audit.jsonl")
+	auditPath := filepath.Join(root, ".workbench", "audit.jsonl")
 	file, err := os.OpenFile(auditPath, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		t.Fatalf("open audit log: %v", err)
@@ -322,8 +322,8 @@ func TestVerifyWorkflowRejectsSymlinkedAuditWithoutTouchingTarget(t *testing.T) 
 		t.Skip("symlink fixture requires platform symlink support")
 	}
 	root, runID := prepareVerificationFixture(t)
-	writeTestFile(t, root, "docs/station/brief.md", []byte("brief\n"))
-	auditPath := filepath.Join(root, ".station", "audit.jsonl")
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("brief\n"))
+	auditPath := filepath.Join(root, ".workbench", "audit.jsonl")
 	if err := os.Remove(auditPath); err != nil {
 		t.Fatalf("remove local audit file: %v", err)
 	}
@@ -350,7 +350,7 @@ func TestVerifyWorkflowRejectsSymlinkedAuditWithoutTouchingTarget(t *testing.T) 
 
 func TestVerifyWorkflowRejectsManifestChangedAfterPreparation(t *testing.T) {
 	root, runID := prepareVerificationFixture(t)
-	writeTestFile(t, root, "docs/station/brief.md", []byte("brief\n"))
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("brief\n"))
 	writeTestFile(t, root, "workspace.json", []byte("{ not valid workspace json"))
 
 	_, err := VerifyWorkflow(root, "brainstorm", runID)
@@ -363,7 +363,7 @@ func TestVerifyWorkflowRejectsManifestChangedAfterPreparation(t *testing.T) {
 
 func TestVerifyWorkflowRejectsExpandedWriteScopeAfterPreparation(t *testing.T) {
 	root, runID := prepareVerificationFixture(t)
-	writeTestFile(t, root, "docs/station/brief.md", []byte("brief\n"))
+	writeTestFile(t, root, "docs/workbench/brief.md", []byte("brief\n"))
 	writeTestFile(t, root, "apps/web/notes.md", []byte("out-of-scope change\n"))
 
 	manifestPath := filepath.Join(root, "workspace.json")
@@ -399,7 +399,7 @@ func prepareVerificationFixture(t *testing.T) (string, string) {
 }
 
 func prepareVerificationRun(t *testing.T, root string) string {
-	return prepareVerificationRunWithReadPaths(t, root, []string{"docs/station/**"})
+	return prepareVerificationRunWithReadPaths(t, root, []string{"docs/workbench/**"})
 }
 
 func prepareVerificationRunWithReadPaths(t *testing.T, root string, readPaths []string) string {
@@ -420,7 +420,7 @@ func prepareVerificationRunWithReadPaths(t *testing.T, root string, readPaths []
 		t.Fatalf("marshal workflow fixture: %v", err)
 	}
 	writeTestFile(t, root, "workspace.json", manifestBytes)
-	writeTestFile(t, root, "docs/station/workflows/brainstorm.md", []byte("versioned brainstorm instruction\n"))
+	writeTestFile(t, root, "docs/workbench/workflows/brainstorm.md", []byte("versioned brainstorm instruction\n"))
 	_, runID, err := PrepareWorkflow(root, "brainstorm", Input{})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow() fixture: %v", err)
@@ -436,7 +436,7 @@ type verificationAuditRecord struct {
 
 func readVerificationAudit(t *testing.T, root string) ([]byte, []verificationAuditRecord) {
 	t.Helper()
-	logBytes, err := os.ReadFile(filepath.Join(root, ".station", "audit.jsonl"))
+	logBytes, err := os.ReadFile(filepath.Join(root, ".workbench", "audit.jsonl"))
 	if err != nil {
 		t.Fatalf("read audit log: %v", err)
 	}

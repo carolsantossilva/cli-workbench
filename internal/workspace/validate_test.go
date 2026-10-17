@@ -15,8 +15,8 @@ func TestLoadWorkspaceAcceptsValidManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadWorkspace() error = %v", err)
 	}
-	if got := manifest.Workspace.ID; got != "sample-station" {
-		t.Fatalf("workspace id = %q, want sample-station", got)
+	if got := manifest.Workspace.ID; got != "sample-workbench" {
+		t.Fatalf("workspace id = %q, want sample-workbench", got)
 	}
 	if diagnostics := validateWorkspace(manifest, root); len(diagnostics) != 0 {
 		t.Fatalf("validateWorkspace() diagnostics = %#v, want none", diagnostics)

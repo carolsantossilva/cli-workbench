@@ -5,7 +5,7 @@ import (
 	"path"
 	"strings"
 
-	"station/internal/workspace"
+	"workbench/internal/workspace"
 )
 
 type Outcome string
@@ -73,7 +73,7 @@ func authorize(action Action, manifest *workspace.Workspace, workflowID string) 
 		return decision(Deny, "external repository writes are not supported", "external-read-only")
 	}
 	if action.Kind == ActionDataSend {
-		return decision(Deny, "Station does not send data to providers", "no-provider-send")
+		return decision(Deny, "Workbench does not send data to providers", "no-provider-send")
 	}
 	if action.Kind != ActionRead && action.Kind != ActionWrite && action.Kind != ActionCommand {
 		return decision(Deny, "action kind is not supported", "invalid-action")
@@ -86,7 +86,7 @@ func authorize(action Action, manifest *workspace.Workspace, workflowID string) 
 			return decision(Deny, "path is outside the workspace contract", "path-boundary")
 		}
 		if isAuditPath(action.Path) {
-			return decision(Deny, "Station audit data is not available to workflow operations", "audit-log-excluded")
+			return decision(Deny, "Workbench audit data is not available to workflow operations", "audit-log-excluded")
 		}
 		if action.ProjectID != "" {
 			project, found := projectByID(manifest, action.ProjectID)
@@ -424,5 +424,5 @@ func isEnvPath(value string) bool {
 
 func isAuditPath(value string) bool {
 	clean := path.Clean(value)
-	return clean == ".station" || strings.HasPrefix(clean, ".station/")
+	return clean == ".workbench" || strings.HasPrefix(clean, ".workbench/")
 }

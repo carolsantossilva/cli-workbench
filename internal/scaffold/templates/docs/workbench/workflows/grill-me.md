@@ -8,7 +8,7 @@ Challenge the current brief: reveal ambiguous terms, untested assumptions, edge 
 
 - Read the declared brief and relevant decision context only.
 - Ask concise, concrete questions; group related questions only when that makes answering easier.
-- Record answers, rejected options, unresolved questions, and their consequences in `docs/station/decisions.md`.
+- Record answers, rejected options, unresolved questions, and their consequences in `docs/workbench/decisions.md`.
 - Do not create a separate grill-me report or silently rewrite the brief as if an assumption were approved.
 
 ## Guardrails

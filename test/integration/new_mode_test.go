@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"station/internal/assets"
-	"station/internal/cli"
-	"station/internal/policy"
-	"station/internal/workspace"
+	"workbench/internal/assets"
+	"workbench/internal/cli"
+	"workbench/internal/policy"
+	"workbench/internal/workspace"
 )
 
 func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *testing.T) {
@@ -26,10 +26,10 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 		Root: root, Stdout: &stdout, Stderr: &stderr,
 	})
 	if !result.OK || result.ExitCode != 0 {
-		t.Fatalf("station new failed: result=%#v stdout=%q stderr=%q", result, stdout.String(), stderr.String())
+		t.Fatalf("workbench new failed: result=%#v stdout=%q stderr=%q", result, stdout.String(), stderr.String())
 	}
 	if stderr.Len() != 0 {
-		t.Fatalf("station new wrote to stderr: %q", stderr.String())
+		t.Fatalf("workbench new wrote to stderr: %q", stderr.String())
 	}
 
 	manifest, err := workspace.LoadWorkspace(root)
@@ -71,7 +71,7 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 		{category: "secret", want: policy.Deny},
 		{category: "unknown", want: policy.Ask},
 	} {
-		got := policy.ScanData("docs/station/idea.md", "fixture", test.category, dataPolicy).Decision.Outcome
+		got := policy.ScanData("docs/workbench/idea.md", "fixture", test.category, dataPolicy).Decision.Outcome
 		if got != test.want {
 			t.Errorf("data category %q decision = %q, want %q", test.category, got, test.want)
 		}
@@ -82,11 +82,11 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 		output  string
 		handoff string
 	}{
-		"brainstorm": {inputs: []string{"docs/station/idea.md"}, output: "docs/station/brief.md", handoff: "docs/station/brief.md"},
-		"grill-me":   {inputs: []string{"docs/station/brief.md"}, output: "docs/station/decisions.md", handoff: "docs/station/decisions.md"},
-		"design":     {inputs: []string{"docs/station/brief.md", "docs/station/decisions.md"}, output: "docs/station/design.md", handoff: "docs/station/design.md"},
-		"build":      {inputs: []string{"docs/station/design.md"}, output: "docs/station/plan.md", handoff: "docs/station/plan.md + paths alterados + design.md"},
-		"review":     {inputs: []string{"docs/station/decisions.md", "docs/station/design.md", "docs/station/plan.md"}, output: "docs/station/decisions.md", handoff: "snapshot/diff + testes + decisions.md"},
+		"brainstorm": {inputs: []string{"docs/workbench/idea.md"}, output: "docs/workbench/brief.md", handoff: "docs/workbench/brief.md"},
+		"grill-me":   {inputs: []string{"docs/workbench/brief.md"}, output: "docs/workbench/decisions.md", handoff: "docs/workbench/decisions.md"},
+		"design":     {inputs: []string{"docs/workbench/brief.md", "docs/workbench/decisions.md"}, output: "docs/workbench/design.md", handoff: "docs/workbench/design.md"},
+		"build":      {inputs: []string{"docs/workbench/design.md"}, output: "docs/workbench/plan.md", handoff: "docs/workbench/plan.md + paths alterados + design.md"},
+		"review":     {inputs: []string{"docs/workbench/decisions.md", "docs/workbench/design.md", "docs/workbench/plan.md"}, output: "docs/workbench/decisions.md", handoff: "snapshot/diff + testes + decisions.md"},
 	}
 	wantWorkflowIDs := []string{"brainstorm", "build", "design", "grill-me", "review"}
 	gotWorkflowIDs := make([]string, 0, len(manifest.Workflows))
@@ -100,10 +100,10 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 		if len(workflow.RequiredSkills) != 0 || len(workflow.AllowedCommands) != 0 {
 			t.Errorf("workflow %q unexpectedly requires skills or allows commands: %#v", id, workflow)
 		}
-		if !reflect.DeepEqual(workflow.AllowedSkills, []string{"station-mobile", "station-web", "station-server", "adr-authoring"}) {
+		if !reflect.DeepEqual(workflow.AllowedSkills, []string{"workbench-mobile", "workbench-web", "workbench-server", "adr-authoring"}) {
 			t.Errorf("workflow %q allowedSkills = %#v", id, workflow.AllowedSkills)
 		}
-		if !reflect.DeepEqual(workflow.ReadPaths, []string{"docs/station/**", ".agents/skills/adr-authoring/SKILL.md"}) {
+		if !reflect.DeepEqual(workflow.ReadPaths, []string{"docs/workbench/**", ".agents/skills/adr-authoring/SKILL.md"}) {
 			t.Errorf("workflow %q readPaths = %#v", id, workflow.ReadPaths)
 		}
 		if !reflect.DeepEqual(workflow.WritePaths, workflow.Outputs) || len(workflow.Outputs) != 1 {
@@ -121,10 +121,10 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 	for _, name := range []string{
 		"README.md", "AGENTS.md", "apps/mobile/README.md", "apps/mobile/AGENTS.md",
 		"apps/web/README.md", "apps/web/AGENTS.md", "apps/server/README.md", "apps/server/AGENTS.md",
-		"docs/station/idea.md", "schemas/workspace.schema.json",
-		"docs/station/workflows/brainstorm.md", "docs/station/workflows/grill-me.md",
-		"docs/station/workflows/design.md", "docs/station/workflows/build.md", "docs/station/workflows/review.md",
-		".agents/skills/station-mobile/SKILL.md", ".agents/skills/station-web/SKILL.md", ".agents/skills/station-server/SKILL.md",
+		"docs/workbench/idea.md", "schemas/workspace.schema.json",
+		"docs/workbench/workflows/brainstorm.md", "docs/workbench/workflows/grill-me.md",
+		"docs/workbench/workflows/design.md", "docs/workbench/workflows/build.md", "docs/workbench/workflows/review.md",
+		".agents/skills/workbench-mobile/SKILL.md", ".agents/skills/workbench-web/SKILL.md", ".agents/skills/workbench-server/SKILL.md",
 		".agents/skills/adr-authoring/SKILL.md",
 	} {
 		if info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(name))); err != nil || !info.Mode().IsRegular() {
@@ -139,7 +139,7 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 	if !bytes.Equal(schema, assets.WorkspaceSchema()) {
 		t.Fatal("generated schema differs from the canonical embedded schema")
 	}
-	idea, err := os.ReadFile(filepath.Join(root, "docs", "station", "idea.md"))
+	idea, err := os.ReadFile(filepath.Join(root, "docs", "workbench", "idea.md"))
 	if err != nil || string(idea) != "A personal planner idea\n" {
 		t.Fatalf("idea input = %q, err=%v", idea, err)
 	}
@@ -157,7 +157,7 @@ func TestNewCreatesMinimalContractualMonorepoWithoutInstallingDependencies(t *te
 		t.Fatalf("commands or externalRepositories are not explicitly empty: %s", encoded)
 	}
 	if _, err := os.Stat(trapMarker); !os.IsNotExist(err) {
-		t.Fatalf("station new invoked an external generator or command: %v", err)
+		t.Fatalf("workbench new invoked an external generator or command: %v", err)
 	}
 }
 
@@ -165,9 +165,9 @@ func TestNewWorkspaceCanPrepareInitialBuildFromApprovedDesign(t *testing.T) {
 	root := t.TempDir()
 	created := cli.Run(context.Background(), []string{"new", "generic workflow fixture"}, cli.Dependencies{Root: root})
 	if !created.OK {
-		t.Fatalf("station new failed: %#v", created)
+		t.Fatalf("workbench new failed: %#v", created)
 	}
-	designPath := filepath.Join(root, "docs", "station", "design.md")
+	designPath := filepath.Join(root, "docs", "workbench", "design.md")
 	if err := os.WriteFile(designPath, []byte("# Approved design fixture\n"), 0o600); err != nil {
 		t.Fatalf("write approved design fixture: %v", err)
 	}
@@ -177,11 +177,11 @@ func TestNewWorkspaceCanPrepareInitialBuildFromApprovedDesign(t *testing.T) {
 		t.Fatalf("initial build workflow could not be prepared from its approved design: %#v", prepared)
 	}
 	inputs := prepared.WorkflowRun.Context.Inputs
-	if len(inputs) != 1 || inputs[0].Path != "docs/station/design.md" {
+	if len(inputs) != 1 || inputs[0].Path != "docs/workbench/design.md" {
 		t.Fatalf("initial build inputs = %#v, want only the existing approved design", inputs)
 	}
 	outputs := prepared.WorkflowRun.Context.ExpectedOutputs
-	if len(outputs) != 1 || outputs[0].Path != "docs/station/plan.md" || outputs[0].Exists || outputs[0].Status != "pending" {
+	if len(outputs) != 1 || outputs[0].Path != "docs/workbench/plan.md" || outputs[0].Exists || outputs[0].Status != "pending" {
 		t.Fatalf("initial build expected outputs = %#v, want a pending plan artifact", outputs)
 	}
 }
@@ -198,7 +198,7 @@ func TestNewRefusesNonEmptyDestinationWithoutOverwritingOrAddingFiles(t *testing
 		Root: root, Stdout: &stdout, Stderr: &stderr,
 	})
 	if result.OK || result.ExitCode == 0 {
-		t.Fatalf("station new accepted a non-empty destination: result=%#v stdout=%q", result, stdout.String())
+		t.Fatalf("workbench new accepted a non-empty destination: result=%#v stdout=%q", result, stdout.String())
 	}
 	content, err := os.ReadFile(markerPath)
 	if err != nil || string(content) != marker {

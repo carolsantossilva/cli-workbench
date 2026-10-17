@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"station/internal/workspace"
+	"workbench/internal/workspace"
 )
 
 type runState struct {
@@ -73,10 +73,10 @@ func manifestFingerprint(manifest *workspace.Workspace) (string, error) {
 func ValidatePreparedRunManifest(root, workflowID, runID string, manifest *workspace.Workspace) error {
 	state, err := readRunState(root, runID)
 	if err != nil {
-		return workflowFailure(FailurePrerequisiteMissing, ".station/runs", "prepared workflow run state is missing or not safely readable")
+		return workflowFailure(FailurePrerequisiteMissing, ".workbench/runs", "prepared workflow run state is missing or not safely readable")
 	}
 	if !validRunStateForVerification(state, workflowID, runID) {
-		return workflowFailure(FailureInvalid, ".station/runs", "prepared workflow run metadata does not match the requested workflow")
+		return workflowFailure(FailureInvalid, ".workbench/runs", "prepared workflow run metadata does not match the requested workflow")
 	}
 	fingerprint, err := manifestFingerprint(manifest)
 	if err != nil {
@@ -193,13 +193,13 @@ func openRunsRoot(root string, create bool) (*os.Root, error) {
 	}
 	defer workspaceRoot.Close()
 
-	stationRoot, err := openStateDirectory(workspaceRoot, ".station", create)
+	workbenchRoot, err := openStateDirectory(workspaceRoot, ".workbench", create)
 	if err != nil {
 		return nil, err
 	}
-	defer stationRoot.Close()
+	defer workbenchRoot.Close()
 
-	return openStateDirectory(stationRoot, "runs", create)
+	return openStateDirectory(workbenchRoot, "runs", create)
 }
 
 func openStateDirectory(parent *os.Root, name string, create bool) (*os.Root, error) {

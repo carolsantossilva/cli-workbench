@@ -28,7 +28,7 @@ func TestRunStateRoundTripPersistsSnapshotMetadataOnly(t *testing.T) {
 		t.Fatalf("round-trip mismatch:\n got: %#v\nwant: %#v", got, want)
 	}
 
-	data, err := os.ReadFile(filepath.Join(root, ".station", "runs", stateTestRunID+".json"))
+	data, err := os.ReadFile(filepath.Join(root, ".workbench", "runs", stateTestRunID+".json"))
 	if err != nil {
 		t.Fatalf("read persisted JSON: %v", err)
 	}
@@ -43,9 +43,9 @@ func TestWriteRunStateUsesPrivatePermissions(t *testing.T) {
 		t.Fatalf("write run state: %v", err)
 	}
 	for path, want := range map[string]os.FileMode{
-		filepath.Join(root, ".station"):                                 0o700,
-		filepath.Join(root, ".station", "runs"):                         0o700,
-		filepath.Join(root, ".station", "runs", stateTestRunID+".json"): 0o600,
+		filepath.Join(root, ".workbench"):                                 0o700,
+		filepath.Join(root, ".workbench", "runs"):                         0o700,
+		filepath.Join(root, ".workbench", "runs", stateTestRunID+".json"): 0o600,
 	} {
 		info, err := os.Stat(path)
 		if err != nil {
@@ -57,26 +57,26 @@ func TestWriteRunStateUsesPrivatePermissions(t *testing.T) {
 	}
 }
 
-func TestWriteRunStatePreservesExistingStationDirectoryPermissions(t *testing.T) {
+func TestWriteRunStatePreservesExistingWorkbenchDirectoryPermissions(t *testing.T) {
 	root := t.TempDir()
-	station := filepath.Join(root, ".station")
-	if err := os.Mkdir(station, 0o755); err != nil {
+	workbench := filepath.Join(root, ".workbench")
+	if err := os.Mkdir(workbench, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(station, 0o755); err != nil {
+	if err := os.Chmod(workbench, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := writeRunState(root, testRunState(stateTestRunID)); err != nil {
 		t.Fatalf("write run state: %v", err)
 	}
-	info, err := os.Stat(station)
+	info, err := os.Stat(workbench)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := info.Mode().Perm(); got != 0o755 {
-		t.Fatalf("pre-existing .station permissions changed to %#o, want 0755", got)
+		t.Fatalf("pre-existing .workbench permissions changed to %#o, want 0755", got)
 	}
-	runsInfo, err := os.Stat(filepath.Join(station, "runs"))
+	runsInfo, err := os.Stat(filepath.Join(workbench, "runs"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestWriteRunStateDoesNotOverwriteExistingRun(t *testing.T) {
 	if err := writeRunState(root, first); err != nil {
 		t.Fatalf("write initial run state: %v", err)
 	}
-	path := filepath.Join(root, ".station", "runs", stateTestRunID+".json")
+	path := filepath.Join(root, ".workbench", "runs", stateTestRunID+".json")
 	before, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read initial run state: %v", err)
@@ -111,7 +111,7 @@ func TestWriteRunStateDoesNotOverwriteExistingRun(t *testing.T) {
 	}
 }
 
-func TestMalformedRunIDIsRejectedBeforeCreatingStationDirectory(t *testing.T) {
+func TestMalformedRunIDIsRejectedBeforeCreatingWorkbenchDirectory(t *testing.T) {
 	root := t.TempDir()
 	badID := "../../private-run-id-input"
 	state := testRunState(badID)
@@ -120,8 +120,8 @@ func TestMalformedRunIDIsRejectedBeforeCreatingStationDirectory(t *testing.T) {
 	} else if strings.Contains(err.Error(), badID) {
 		t.Fatalf("error exposed malformed run ID: %v", err)
 	}
-	if _, err := os.Lstat(filepath.Join(root, ".station")); !os.IsNotExist(err) {
-		t.Fatalf(".station exists after malformed ID rejection: %v", err)
+	if _, err := os.Lstat(filepath.Join(root, ".workbench")); !os.IsNotExist(err) {
+		t.Fatalf(".workbench exists after malformed ID rejection: %v", err)
 	}
 
 	if _, err := readRunState(root, badID); err == nil {
@@ -132,7 +132,7 @@ func TestMalformedRunIDIsRejectedBeforeCreatingStationDirectory(t *testing.T) {
 }
 
 func TestRunStateRejectsSymlinkedDirectoriesWithoutTouchingOutside(t *testing.T) {
-	for _, name := range []string{".station", "runs"} {
+	for _, name := range []string{".workbench", "runs"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			outside := t.TempDir()
@@ -142,10 +142,10 @@ func TestRunStateRejectsSymlinkedDirectoriesWithoutTouchingOutside(t *testing.T)
 				t.Fatalf("write outside sentinel: %v", err)
 			}
 
-			link := filepath.Join(root, ".station")
+			link := filepath.Join(root, ".workbench")
 			if name == "runs" {
 				if err := os.Mkdir(link, 0o700); err != nil {
-					t.Fatalf("create .station: %v", err)
+					t.Fatalf("create .workbench: %v", err)
 				}
 				link = filepath.Join(link, "runs")
 			}
@@ -174,13 +174,13 @@ func TestRunStateRejectsSymlinkedDirectoriesWithoutTouchingOutside(t *testing.T)
 }
 
 func TestRunStateRejectsNonDirectoryStatePaths(t *testing.T) {
-	for _, name := range []string{".station", "runs"} {
+	for _, name := range []string{".workbench", "runs"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
-			path := filepath.Join(root, ".station")
+			path := filepath.Join(root, ".workbench")
 			if name == "runs" {
 				if err := os.Mkdir(path, 0o700); err != nil {
-					t.Fatalf("create .station: %v", err)
+					t.Fatalf("create .workbench: %v", err)
 				}
 				path = filepath.Join(path, "runs")
 			}
@@ -224,7 +224,7 @@ func testRunState(runID string) runState {
 			}},
 			ChangedPaths: []string{"apps/web/src/main.go"},
 		},
-		OutputPaths: []string{"docs/station/plan.md"},
+		OutputPaths: []string{"docs/workbench/plan.md"},
 		CreatedAt:   time.Date(2026, time.September, 20, 12, 31, 0, 0, time.UTC),
 	}
 }

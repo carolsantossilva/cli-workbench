@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"station/internal/policy"
-	"station/internal/workspace"
+	"workbench/internal/policy"
+	"workbench/internal/workspace"
 )
 
 const maxMetadataBytes = 64 << 10
@@ -107,7 +107,7 @@ func inspectExistingWorkspace(root string) (ExistingInspection, error) {
 	projects := append([]workspace.Project(nil), manifest.Projects...)
 	return ExistingInspection{
 		Root: absoluteRoot, ManifestStatus: "valid", Projects: projects, Entries: entries,
-		Warnings: []string{"Inspection is read-only and does not execute commands; host tools remain outside Station control."},
+		Warnings: []string{"Inspection is read-only and does not execute commands; host tools remain outside Workbench control."},
 	}, nil
 }
 

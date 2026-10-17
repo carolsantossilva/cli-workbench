@@ -61,7 +61,7 @@ func TestSnapshotGitWorkspaceCapturesChangesAndExplicitPaths(t *testing.T) {
 	writeGitFixture(t, root, "secret.pem", []byte("-----BEGIN PRIVATE KEY-----\nprivate fixture\n-----END PRIVATE KEY-----\n"))
 	writeGitFixture(t, root, ".env.local", []byte("SERVICE_PASSWORD=private fixture\n"))
 	runSnapshotTestGit(t, root, "add", "--", "tracked.txt", "deleted.txt", "stable/brief.md")
-	runSnapshotTestGit(t, root, "-c", "user.name=Station Test", "-c", "user.email=station@example.invalid", "commit", "--quiet", "-m", "baseline")
+	runSnapshotTestGit(t, root, "-c", "user.name=Workbench Test", "-c", "user.email=workbench@example.invalid", "commit", "--quiet", "-m", "baseline")
 
 	trackedContent := []byte("after\n")
 	untrackedContent := []byte("new file\n")
@@ -115,7 +115,7 @@ func TestSnapshotGitWorkspaceReportsOutOfScopePathWithoutHashingContent(t *testi
 	declaredContent := []byte("declared input\n")
 	writeGitFixture(t, root, "declared.md", declaredContent)
 	runSnapshotTestGit(t, root, "add", "--", "declared.md")
-	runSnapshotTestGit(t, root, "-c", "user.name=Station Test", "-c", "user.email=station@example.invalid", "commit", "--quiet", "-m", "baseline")
+	runSnapshotTestGit(t, root, "-c", "user.name=Workbench Test", "-c", "user.email=workbench@example.invalid", "commit", "--quiet", "-m", "baseline")
 
 	outsideContent := []byte("out-of-scope content that must not be hashed or persisted\n")
 	writeGitFixture(t, root, "outside.md", outsideContent)
@@ -173,7 +173,7 @@ func TestSnapshotGitWorkspaceReturnsErrorsAfterRecognizingSameRootRepository(t *
 	initSnapshotTestRepo(t, root)
 	writeGitFixture(t, root, "tracked.txt", []byte("baseline\n"))
 	runSnapshotTestGit(t, root, "add", "--", "tracked.txt")
-	runSnapshotTestGit(t, root, "-c", "user.name=Station Test", "-c", "user.email=station@example.invalid", "commit", "--quiet", "-m", "baseline")
+	runSnapshotTestGit(t, root, "-c", "user.name=Workbench Test", "-c", "user.email=workbench@example.invalid", "commit", "--quiet", "-m", "baseline")
 
 	index := filepath.Join(root, ".git", "index")
 	if err := os.Remove(index); err != nil {
@@ -219,7 +219,7 @@ func TestSnapshotGitWorkspaceDisablesConfiguredFSMonitorHook(t *testing.T) {
 	initSnapshotTestRepo(t, root)
 	writeGitFixture(t, root, "tracked.txt", []byte("baseline\n"))
 	runSnapshotTestGit(t, root, "add", "--", "tracked.txt")
-	runSnapshotTestGit(t, root, "-c", "user.name=Station Test", "-c", "user.email=station@example.invalid", "commit", "--quiet", "-m", "baseline")
+	runSnapshotTestGit(t, root, "-c", "user.name=Workbench Test", "-c", "user.email=workbench@example.invalid", "commit", "--quiet", "-m", "baseline")
 
 	marker := filepath.Join(root, "fsmonitor-ran")
 	hook := filepath.Join(root, "fsmonitor-hook")

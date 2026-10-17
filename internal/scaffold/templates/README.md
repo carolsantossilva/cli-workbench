@@ -1,4 +1,4 @@
-# Station workspace
+# Workbench workspace
 
 This repository is a mobile, web, and server monorepo scaffold. It contains the versioned workspace contract and local AI instructions; it is not an application template and has no installed dependencies.
 
