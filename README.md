@@ -1,6 +1,6 @@
 # Workbench
 
-Workbench is a local CLI for validating a workspace contract and preparing/verifying policy-bounded workflow handoffs. It does not call language models or provide a task/planner app. The agent or host remains responsible for carrying out the work.
+Workbench is a local CLI for validating a workspace contract and preparing/verifying policy-bounded workflow handoffs. It does not call language models or provide the app. The agent or host remains responsible for carrying out the work.
 
 ## Build and install
 
