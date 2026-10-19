@@ -1,0 +1,11 @@
+{
+  "name": "workbench-pi-spike",
+  "version": "1.0.0",
+  "description": "Descartável: spike da Workbench como host baseado no Pi (ver README)",
+  "scripts": {},
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^1.3.0"
+  }
+}
