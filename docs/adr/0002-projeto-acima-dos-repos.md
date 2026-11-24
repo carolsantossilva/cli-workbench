@@ -3,7 +3,7 @@
 - **Status:** proposed
 - **Escrito em:** 2026-11-24
 - **Escopo:** o que o `wb` entende por "projeto", onde cada etapa roda e onde ficam estado e auditoria.
-- **Decidido em 2026-11-24:** o `wb` cria as worktrees (item 5 da Decisão).
+- **Decidido em 2026-11-24:** só o item 5 da Decisão (o `wb` cria as worktrees). O resto continua proposto.
 - **Implementação:** parcial. A auditoria já foi para `<projeto>/.workbench/runs/` (PR #5). Hoje "projeto" ainda é um único diretório, na prática um repo. O resto deste ADR não foi implementado.
 
 ## Contexto
@@ -58,6 +58,7 @@ Nesse arranjo, a especificação não pertence a nenhum repo: o design de um pro
 - O sandbox do `build` passa a ter duas áreas de escrita: o repo e o `plan.md` do projeto. Hoje a raiz é uma só, então `sandbox.ts` e `policy.ts` precisam aceitar mais de uma raiz, cada uma com suas regras.
 - `wb status` mostra as etapas do projeto e, para cada repo, os runs que aconteceram nele.
 - O `git status` usado para listar os arquivos alterados roda em cada repo tocado, não só na raiz.
+- Numa worktree, `.git` é um arquivo que aponta para o clone (`gitdir: ...`), que pode estar fora do projeto. O `git worktree add` e o `fetch` rodam no host, fora do sandbox. Dentro do sandbox, o `.git` da worktree continua só leitura, como hoje, e o clone externo fica fora da raiz. Por isso o agente não faz commit; commits ficam com o usuário ou com um passo do host.
 - Projetos de um repo só não mudam: o `.workbench.json` sem `repos` continua valendo como hoje.
 
 ## Em aberto antes da aceitação
