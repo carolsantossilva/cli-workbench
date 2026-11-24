@@ -40,7 +40,7 @@ export function findDeniedFiles(root: string, deny: readonly string[], maxDepth 
 		}
 		for (const e of entries) {
 			const r = rel ? `${rel}/${e.name}` : e.name;
-			if (e.name === ".workbench" && e.isDirectory()) {
+			if (e.name === ".workbench" && e.isDirectory() && matchesAny(`${r}/x`, deny)) {
 				// Estado e auditoria do wb: a pasta inteira entra na lista (mascarada de uma vez no
 				// sandbox), sem descer nela; um item por arquivo cresceria com cada run.
 				out.push(path.join(dir, e.name));
