@@ -18,6 +18,21 @@ node src/cli.ts run ~/meu-projeto --perfil docs "resuma a arquitetura em docs/ar
 
 O modelo padrão é `openai-codex/gpt-6-luna`. Para trocar, use `--modelo provider/modelo`.
 
+### Aprovação interativa
+
+Quando o agente tenta ler ou escrever um arquivo fora do perfil, a Workbench pergunta no terminal:
+
+```
+? O agente quer ESCREVER em src/soma.js (o perfil "docs" não permite escrever em src/soma.js)
+  [s] sim, desta vez   [t] sim, até o fim desta execução   [n] não  >
+```
+
+- `s` libera só aquela chamada. `t` libera aquele arquivo até o fim da execução. `n`, ou Enter, nega.
+- Com `--sem-perguntas`, ou sem terminal interativo, tudo fora do perfil é negado sem perguntar.
+- Regras fixas **nunca** viram pergunta: arquivos sensíveis, caminhos fora da raiz, `.git/` e a configuração da Workbench.
+- Com a aprovação ligada, até o perfil `leitura` recebe `write`/`edit`, e cada escrita vira pergunta. O bash continua só no perfil `codigo`.
+- Cada resposta fica registrada na auditoria (evento `approval`).
+
 ## Perfis
 
 | Perfil | Lê | Escreve | Comandos |
@@ -66,5 +81,6 @@ npm run typecheck
 - A redação de segredos é heurística (regex). Um segredo fora desses padrões, num arquivo permitido, chega ao modelo.
 - O filtro de `grep`/`find`/`ls` tira linhas de arquivos negados pelo nome, mas o `rg` já pula arquivos ocultos e o `.gitignore` por padrão.
 - "Arquivos alterados" compara o `git status` de antes e de depois. Um arquivo que já estava modificado e foi alterado de novo não aparece.
-- Ainda não há aprovação interativa (`ask`), workflows (brainstorm, design, build…), vários agentes nem WhatsApp.
+- A aprovação vale por arquivo exato, não por pasta ou padrão, e não cobre comandos: no perfil `codigo` o bash é livre dentro do sandbox.
+- Ainda não há workflows (brainstorm, design, build…), vários agentes nem WhatsApp.
 - O sandbox só funciona no Linux (bubblewrap).

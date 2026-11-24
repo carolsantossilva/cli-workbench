@@ -25,7 +25,19 @@ export interface Decision {
 	target: string;
 	allowed: boolean;
 	reason?: string;
+	/** Quem decidiu: o perfil, uma regra fixa, ou o usuário ao ser perguntado. */
+	by?: "perfil" | "regra" | "usuario";
 }
+
+export interface ApprovalRequest {
+	tool: string;
+	mode: "read" | "write";
+	path: string;
+	reason: string;
+}
+
+/** once: só esta chamada. run: este arquivo, até o fim da execução. deny: nega. */
+export type ApprovalAnswer = "once" | "run" | "deny";
 
 export interface RunOptions {
 	projectDir: string;
@@ -40,6 +52,8 @@ export interface RunOptions {
 	agentDir?: string;
 	onText?: (delta: string) => void;
 	onDecision?: (d: Decision) => void;
+	/** Pergunta ao usuário sobre ações fora do perfil. Sem isso, tudo fora do perfil é negado. */
+	ask?: (req: ApprovalRequest) => Promise<ApprovalAnswer>;
 }
 
 export interface RunResult {
@@ -67,7 +81,7 @@ function gitChanges(root: string): Set<string> | undefined {
 	}
 }
 
-export function describeScope(scope: EffectiveScope, commands: DetectedCommand[]): string {
+export function describeScope(scope: EffectiveScope, commands: DetectedCommand[], interactive = false): string {
 	const p = scope.profile;
 	return [
 		`# Workbench: perfil "${p.name}"`,
@@ -78,7 +92,9 @@ export function describeScope(scope: EffectiveScope, commands: DetectedCommand[]
 		p.bash === "sandbox"
 			? `Comandos: bash disponível num sandbox SEM rede (não dá para instalar dependências nem acessar a internet). Comandos detectados no projeto: ${commands.map((c) => c.command).join(", ") || "nenhum"}.`
 			: "Comandos: nenhum. O bash não está disponível neste perfil.",
-		"Chamadas fora desse escopo são bloqueadas pelo host. Não tente contornar o bloqueio: se precisar de algo bloqueado, diga no resumo final o que faltou e por quê.",
+		interactive
+			? "Se a tarefa exigir ler ou escrever um arquivo fora desse escopo, faça a chamada mesmo assim: o host pergunta ao usuário, que pode liberar ou negar. Arquivos sensíveis, caminhos fora da raiz, .git e a configuração da Workbench nunca são liberados. Se uma chamada for negada, não tente contornar: siga sem ela e diga no resumo final o que faltou."
+			: "Chamadas fora desse escopo são bloqueadas pelo host. Não tente contornar o bloqueio: se precisar de algo bloqueado, diga no resumo final o que faltou e por quê.",
 		"Ao terminar, escreva um resumo curto em português: o que fez, arquivos alterados e o que ficou pendente.",
 	].join("\n");
 }
@@ -99,13 +115,41 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		appendFileSync(auditPath, JSON.stringify({ ts: new Date().toISOString(), runId, event, ...data }) + "\n");
 
 	const decisions: Decision[] = [];
-	const decide = (tool: string, target: string, allowed: boolean, reason?: string) => {
-		const d = { tool, target, allowed, reason };
+	const decide = (tool: string, target: string, allowed: boolean, reason?: string, by: Decision["by"] = "perfil") => {
+		const d: Decision = { tool, target, allowed, reason, by };
 		decisions.push(d);
 		audit("decision", { ...d });
 		opts.onDecision?.(d);
 		return allowed ? undefined : { block: true, reason: `Bloqueado pela Workbench: ${reason}` };
 	};
+
+	// Liberações "até o fim da execução", por arquivo exato e modo.
+	const granted = { read: new Set<string>(), write: new Set<string>() };
+	// Perguntas em série: chamadas paralelas do modelo não abrem dois prompts juntos.
+	let askQueue: Promise<unknown> = Promise.resolve();
+	const askUser = (req: ApprovalRequest): Promise<ApprovalAnswer> => {
+		const ask = opts.ask;
+		if (!ask) return Promise.resolve("deny");
+		const next = askQueue.then(() => ask(req)).catch(() => "deny" as const);
+		askQueue = next;
+		return next;
+	};
+
+	async function gate(tool: string, input: string, mode: "read" | "write") {
+		const d = checkPath(root, input, mode, scope);
+		if (d.allow) return decide(tool, input, true);
+		if (d.hard || !d.rel) return decide(tool, input, false, d.reason, "regra");
+		if (granted[mode].has(d.rel)) return decide(tool, input, true, "liberado pelo usuário nesta execução", "usuario");
+		const answer = await askUser({ tool, mode, path: d.rel, reason: d.reason });
+		audit("approval", { tool, mode, path: d.rel, answer });
+		if (answer === "deny") return decide(tool, input, false, `${d.reason} (negado pelo usuário)`, "usuario");
+		if (answer === "run") {
+			granted[mode].add(d.rel);
+			// Quem pode escrever um arquivo também pode lê-lo de volta.
+			if (mode === "write") granted.read.add(d.rel);
+		}
+		return decide(tool, input, true, answer === "run" ? "liberado pelo usuário nesta execução" : "liberado pelo usuário uma vez", "usuario");
+	}
 
 	function extension(pi: ExtensionAPI) {
 		pi.on("tool_call", async (event) => {
@@ -115,21 +159,17 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 				case "read":
 				case "grep":
 				case "find":
-				case "ls": {
-					const d = checkPath(root, String(input.path ?? "."), "read", scope);
-					return decide(event.toolName, target, d.allow, d.allow ? undefined : d.reason);
-				}
+				case "ls":
+					return gate(event.toolName, String(input.path ?? "."), "read");
 				case "write":
-				case "edit": {
-					const d = checkPath(root, String(input.path ?? ""), "write", scope);
-					return decide(event.toolName, target, d.allow, d.allow ? undefined : d.reason);
-				}
+				case "edit":
+					return gate(event.toolName, String(input.path ?? ""), "write");
 				case "bash":
 					return scope.profile.bash === "sandbox"
 						? decide("bash", target, true, "sandbox")
-						: decide("bash", target, false, `o perfil "${scope.profile.name}" não roda comandos`);
+						: decide("bash", target, false, `o perfil "${scope.profile.name}" não roda comandos`, "regra");
 				default:
-					return decide(event.toolName, target, false, "ferramenta fora do contrato da Workbench");
+					return decide(event.toolName, target, false, "ferramenta fora do contrato da Workbench", "regra");
 			}
 		});
 
@@ -202,12 +242,13 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		noSkills: true,
 		noPromptTemplates: true,
 		noThemes: true,
-		appendSystemPrompt: [describeScope(scope, commands)],
+		appendSystemPrompt: [describeScope(scope, commands, Boolean(opts.ask))],
 	});
 	await resourceLoader.reload();
 
 	const tools = ["read", "grep", "find", "ls"];
-	if (scope.write.length > 0) tools.push("write", "edit");
+	// Com aprovação interativa, até o perfil leitura recebe write/edit: cada escrita vira pergunta.
+	if (scope.write.length > 0 || opts.ask) tools.push("write", "edit");
 	// `tools` é uma allowlist; o "bash" listado aqui é a definição sandboxed de customTools.
 	if (scope.profile.bash === "sandbox") tools.push("bash");
 	const customTools =
@@ -221,7 +262,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 			: [];
 
 	const before = gitChanges(root);
-	audit("start", { projectDir: root, profile: scope.profile.name, model: `${model.provider}/${model.id}`, task: opts.task, write: scope.write, commands: commands.map((c) => c.command) });
+	audit("start", { projectDir: root, profile: scope.profile.name, interactive: Boolean(opts.ask), model: `${model.provider}/${model.id}`, task: opts.task, write: scope.write, commands: commands.map((c) => c.command) });
 
 	const { session } = await createAgentSession({
 		cwd: root,

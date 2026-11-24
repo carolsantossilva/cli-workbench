@@ -160,3 +160,68 @@ test("perfil leitura: sem ferramentas de escrita nem bash", async () => {
 	assert.deepEqual(r.changedFiles, []);
 	assert.equal(r.finalText, "Só li.");
 });
+
+test("aprovação interativa: pergunta só fora do perfil, respeita once/run/deny e nunca libera regra fixa", async () => {
+	const root = makeProject("ask");
+	const asked: string[] = [];
+	const answers: Record<string, "once" | "run" | "deny"> = { "src/app.ts": "once", "src/novo.ts": "run", "src/negado.ts": "deny" };
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage(
+			[
+				fauxToolCall("write", { path: "docs/ok.md", content: "# ok\n" }),
+				fauxToolCall("write", { path: "src/app.ts", content: "export const x = 2;\n" }),
+				fauxToolCall("write", { path: "src/novo.ts", content: "v1\n" }),
+				fauxToolCall("write", { path: "src/negado.ts", content: "x\n" }),
+				fauxToolCall("read", { path: ".env" }),
+				fauxToolCall("write", { path: ".workbench.json", content: "{}" }),
+				fauxToolCall("write", { path: "../fora.txt", content: "x" }),
+			],
+			{ stopReason: "toolUse" },
+		),
+		fauxAssistantMessage(
+			[
+				fauxToolCall("write", { path: "src/novo.ts", content: "v2\n" }),
+				fauxToolCall("write", { path: "src/app.ts", content: "export const x = 3;\n" }),
+			],
+			{ stopReason: "toolUse" },
+		),
+		fauxAssistantMessage([fauxText("Feito.")]),
+	]);
+
+	const r = await runTask({
+		projectDir: root,
+		task: "mexa no código",
+		profile: "docs",
+		modelRuntime,
+		modelOverride: model,
+		auditDir: path.join(tmp, "audit"),
+		ask: async (req) => {
+			asked.push(`${req.mode} ${req.path}`);
+			return req.path === "src/app.ts" && asked.filter((a) => a === "write src/app.ts").length > 1 ? "deny" : (answers[req.path] ?? "deny");
+		},
+	});
+
+	// docs/ok.md está no perfil; .env, .workbench.json e ../fora.txt são regra fixa: nenhum deles pergunta.
+	// src/novo.ts foi liberado "até o fim" e não pergunta de novo; src/app.ts foi "uma vez" e pergunta de novo.
+	assert.deepEqual(asked, ["write src/app.ts", "write src/novo.ts", "write src/negado.ts", "write src/app.ts"]);
+	assert.equal(readFileSync(path.join(root, "src/app.ts"), "utf8"), "export const x = 2;\n");
+	assert.equal(readFileSync(path.join(root, "src/novo.ts"), "utf8"), "v2\n");
+	assert.ok(!existsSync(path.join(root, "src/negado.ts")));
+	assert.ok(!existsSync(path.join(root, ".workbench.json")));
+	assert.ok(!existsSync(path.join(tmp, "fora.txt")));
+	const byUser = r.decisions.filter((d) => d.by === "usuario").map((d) => `${d.target}:${d.allowed}`);
+	assert.deepEqual(byUser, ["src/app.ts:true", "src/novo.ts:true", "src/negado.ts:false", "src/novo.ts:true", "src/app.ts:false"]);
+	const audit = readFileSync(r.auditPath, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+	assert.equal(audit.filter((e) => e.event === "approval").length, 4);
+});
+
+test("sem ask, fora do perfil é negado sem perguntar", async () => {
+	const root = makeProject("semask");
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage([fauxToolCall("write", { path: "src/app.ts", content: "x" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxText("ok")]),
+	]);
+	const r = await runTask({ projectDir: root, task: "x", profile: "docs", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	assert.deepEqual(r.decisions.map((d) => [d.target, d.allowed]), [["src/app.ts", false]]);
+	assert.equal(readFileSync(path.join(root, "src/app.ts"), "utf8"), "export const x = 1;\n");
+});
