@@ -67,7 +67,7 @@ O núcleo Go **não** faz parte do caminho principal. Ele fica no repositório c
 - O produto passa a depender do Node.js (24 ou mais). A CLI Go fica sem papel no caminho principal.
 - A Workbench passa a responder por autenticação, custo de modelo, UX e qualidade do agente. Antes, tudo isso era do Codex.
 - Dependência do roadmap da Earendil (o host usa o Pi 1.6.0), mitigada pela licença MIT.
-- Com uma conta do ChatGPT, só o `gpt-6-luna` é aceito. Ele recusa algumas tarefas comuns sem motivo real ("voting systems"). A palavra "evidência" no prompt dispara a recusa quase sempre, e o host contorna isso com uma troca de palavra e uma nova tentativa.
+- Na conta do ChatGPT testada (2026-11-24), o Codex só aceita os modelos Luna (`gpt-6-luna` e `gpt-5.6-luna`); Sol, Terra e Astra retornam "not supported when using Codex with a ChatGPT account". Isso pode variar com o plano. O `gpt-6-luna` recusa algumas tarefas comuns sem motivo real ("voting systems"). A palavra "evidência" no prompt dispara a recusa quase sempre, e o host contorna isso com uma troca de palavra e uma nova tentativa.
 - O sandbox exige Linux (`bubblewrap`).
 - O Pi não tem permissões nativas, então a camada de política da Workbench não é opcional.
 
