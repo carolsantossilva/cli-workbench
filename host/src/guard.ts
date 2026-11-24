@@ -11,7 +11,7 @@ import { workbenchDir, writeInside } from "./workdir.ts";
 const markerPath = (root: string, runId: string) => path.join(root, ".workbench", `run-${runId}.json`);
 const CONFIG = ".workbench.json";
 
-interface Snapshot {
+export interface Snapshot {
 	runId: string;
 	pid: number;
 	configExisted: boolean;
