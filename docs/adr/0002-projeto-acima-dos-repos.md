@@ -3,6 +3,7 @@
 - **Status:** proposed
 - **Escrito em:** 2026-11-24
 - **Escopo:** o que o `wb` entende por "projeto", onde cada etapa roda e onde ficam estado e auditoria.
+- **Decidido em 2026-11-24:** o `wb` cria as worktrees (item 5 da Decisão).
 - **Implementação:** parcial. A auditoria já foi para `<projeto>/.workbench/runs/` (PR #5). Hoje "projeto" ainda é um único diretório, na prática um repo. O resto deste ADR não foi implementado.
 
 ## Contexto
@@ -42,7 +43,9 @@ Nesse arranjo, a especificação não pertence a nenhum repo: o design de um pro
    - `review` roda no repo e escreve o resultado no projeto.
    - Auditoria e estado ficam sempre no `.workbench/` do projeto, qualquer que seja o nível do run.
 
-5. **Symlinks continuam bloqueados.** Um link dentro do projeto que aponta para fora dele, como um link para o clone original, segue negado. Isso também impede o agente de mexer num clone que deveria ficar limpo.
+5. **O `wb` cria as worktrees.** Um comando (nome a definir, ex.: `wb repo checkout <repo> <branch>`) cria a worktree de um repo declarado em `.worktree/<repo>/<branch>`, a partir da branch base atualizada. O mesmo comando reabre a worktree se ela já existir. O `build` pode pedir uma worktree nova em vez de exigir que ela já exista. O lugar dos clones (dentro do projeto ou numa pasta compartilhada entre projetos) fica configurável no `.workbench.json`.
+
+6. **Symlinks continuam bloqueados.** Um link dentro do projeto que aponta para fora dele, como um link para o clone original, segue negado. Isso também impede o agente de mexer num clone que deveria ficar limpo.
 
 ## Alternativas consideradas
 
@@ -61,5 +64,5 @@ Nesse arranjo, a especificação não pertence a nenhum repo: o design de um pro
 
 - O formato exato de `repos`: só globs, ou também nomes (`{"workbench": ".worktree/workbench/*"}`) para o `--repo` aceitar um nome curto.
 - Um `build` que precise mexer em dois repos ao mesmo tempo: um run por repo, ou um sandbox com vários repos.
-- Se o `wb` deve criar worktrees (`wb repo add`), ou deixar isso para outras ferramentas.
-- A migração de projetos que hoje têm `docs/workbench/` dentro de um repo.
+- **Onde ficam as especificações versionadas.** Hoje `docs/workbench/` (ideia, brief, design, plano) fica dentro do repo, então entra no git e no histórico dele. Com o projeto acima dos repos, a pasta do projeto pode não ser um repositório git, e aí as especificações ficariam sem histórico. Ou a pasta do projeto vira um repo git próprio, ou as especificações continuam num dos repos.
+- **Migração.** Projetos que já têm `docs/workbench/` dentro de um repo: mover para o projeto (com um comando do `wb`), ou continuar lendo de onde estiver.
