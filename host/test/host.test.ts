@@ -8,7 +8,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { runTask } from "../src/host.ts";
+import { rewritePrompt, runTask } from "../src/host.ts";
 import { sandboxAvailable } from "../src/sandbox.ts";
 
 const FAKE_KEY = "sk-ant-api03-" + "FAKE".repeat(10);
@@ -237,4 +237,22 @@ test("recusa espúria: pede uma vez para continuar e registra na auditoria", asy
 	assert.equal(r.finalText, "Feito.");
 	assert.ok(existsSync(path.join(root, "docs/feito.md")));
 	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"recusa"'));
+});
+
+test("reescrita: troca \"evidência\" no pedido antes de enviar e registra na auditoria", async () => {
+	assert.deepEqual(rewritePrompt("Mostre a evidência e as Evidências. EVIDÊNCIA!"), { text: "Mostre a prova e as Provas. PROVA!", count: 3 });
+	assert.deepEqual(rewritePrompt("isso evidencia o bug; evidenciar; inevidência"), { text: "isso evidencia o bug; evidenciar; inevidência", count: 0 });
+
+	const root = makeProject("reescrita");
+	let sent = "";
+	const { modelRuntime, model } = await fauxRuntime([
+		(context) => {
+			sent = JSON.stringify(context.messages);
+			return fauxAssistantMessage([fauxText("ok")]);
+		},
+	]);
+	const r = await runTask({ projectDir: root, task: "liste a evidência do bug", profile: "leitura", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	assert.match(sent, /liste a prova do bug/);
+	assert.doesNotMatch(sent, /evidência/);
+	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"reescrita"'));
 });

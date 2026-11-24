@@ -86,6 +86,26 @@ export function looksLikeRefusal(text: string): boolean {
 	return text.length < 300 && REFUSAL.test(text);
 }
 
+// Palavras do texto do usuário que disparam recusa espúria no gpt-6-luna ("voting systems
+// or elections infrastructure"), trocadas antes de enviar. Medido em 2026-11-24, 6 execuções
+// cada: "evidência" recusou 6/6; "prova", "comprovação" e "evidencia" sem acento, 0/6.
+const PROMPT_REWRITES: { from: RegExp; to: string }[] = [{ from: /(?<!\p{L})evidência(s?)(?!\p{L})/giu, to: "prova" }];
+
+function matchCase(original: string, replacement: string): string {
+	if (original === original.toUpperCase()) return replacement.toUpperCase();
+	if (original[0] === original[0].toUpperCase()) return replacement[0].toUpperCase() + replacement.slice(1);
+	return replacement;
+}
+
+/** Troca no texto do usuário as palavras que disparam recusa espúria. */
+export function rewritePrompt(text: string): { text: string; count: number } {
+	let count = 0;
+	for (const { from, to } of PROMPT_REWRITES) {
+		text = text.replace(from, (m: string, plural: string) => (count++, matchCase(m, to + (plural ? "s" : ""))));
+	}
+	return { text, count };
+}
+
 function throwIfModelError(last: unknown): void {
 	const m = last as { role?: string; stopReason?: string; errorMessage?: string } | undefined;
 	if (m?.role === "assistant" && m.stopReason === "error") throw new Error(`erro do modelo: ${m.errorMessage ?? "desconhecido"}`);
@@ -302,7 +322,9 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 			: [];
 
 	const before = gitChanges(root);
-	audit("start", { projectDir: root, profile: scope.profile.name, interactive: Boolean(opts.ask), model: `${model.provider}/${model.id}`, task: opts.task, write: scope.write, commands: commands.map((c) => c.command) });
+	const rewritten = rewritePrompt(opts.task);
+	const task = rewritten.text;
+	audit("start", { projectDir: root, profile: scope.profile.name, interactive: Boolean(opts.ask), model: `${model.provider}/${model.id}`, task, write: scope.write, commands: commands.map((c) => c.command) });
 
 	const { session } = await createAgentSession({
 		cwd: root,
@@ -317,6 +339,10 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		sessionManager: SessionManager.inMemory(root),
 	});
 	await session.bindExtensions?.({});
+	if (rewritten.count > 0) {
+		audit("reescrita", { count: rewritten.count, motivo: "palavra que dispara recusa espúria" });
+		opts.onText?.(`[workbench: troquei ${rewritten.count} palavra(s) que fazem o modelo recusar; veja "reescrita" na auditoria]\n`);
+	}
 	audit("thinking", { requested: opts.thinkingLevel ?? DEFAULT_THINKING, effective: session.thinkingLevel });
 	const unsubscribe = session.subscribe((event) => {
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") opts.onText?.(event.assistantMessageEvent.delta);
@@ -324,7 +350,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 
 	let finalText = "";
 	try {
-		await session.prompt(opts.task);
+		await session.prompt(task);
 		throwIfModelError(session.messages.at(-1));
 		finalText = session.getLastAssistantText() ?? "";
 		// Recusas espúrias acontecem de forma intermitente: uma retomada simples, sem argumentar.
