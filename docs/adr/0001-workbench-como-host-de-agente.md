@@ -40,22 +40,21 @@ A Workbench passa a ser o **agente**, e não só o orientador de um agente exter
 4. **Audita localmente** cada decisão e cada envio ao provedor: modelo, bytes e sha256, nunca o conteúdo. Segredos são redigidos antes do envio.
 5. **Chama o modelo pelo provedor configurado pelo usuário** via Pi. O padrão é o login do ChatGPT, com `openai-codex/gpt-6-luna` e raciocínio `xhigh`.
 
-O núcleo Go **não** faz parte do caminho principal. Ele fica no repositório como referência, e o que ainda servir do contrato dele (schema, preparação, verificação) é portado para o host quando for preciso.
+O núcleo Go é **removido** do repositório; ele continua no histórico do git. Os templates e as skills do scaffold (`workbench new`) são guardados em `templates/`, sem código, para o host reaproveitar quando ganhar um comando de criação de projeto.
 
 ## Alternativas consideradas
 
 - **Manter Codex-first, com o host Pi como segundo caminho.** Preservaria o `design.md` atual, mas as garantias da §7 continuariam opcionais e o caminho principal continuaria sem elas. Rejeitada no grill-me.
 - **Host Pi consumindo o núcleo Go** (`workflow run`/`verify` como contrato e escopo compilado pelo Go). Era a primeira versão deste ADR. Rejeitada em 2026-11-23: manteria dois runtimes e um `workspace.json` escrito à mão, sem ganho para o uso real. O Go tinha sido escolhido só por desempenho, o que não pesa num processo que passa a maior parte do tempo esperando o modelo.
 - **Extensão avulsa do Pi, fora do produto.** É a opção mais barata, mas não muda as garantias da Workbench. Rejeitada no grill-me.
-- **Hooks de outros hosts (Codex, Claude Code).** A cobertura varia por host, e nenhum deles dá controle do payload enviado ao provedor. Isso continua como possível modo degradado (ver "Em aberto").
+- **Hooks de outros hosts (Codex, Claude Code), ou mantê-los em modo orientado pela CLI Go.** A cobertura varia por host, e nenhum deles dá controle do payload enviado ao provedor. Manter a CLI Go só para isso significaria manter dois produtos. Rejeitada em 2026-11-24.
 - **Escrever um harness próprio do zero.** Daria controle total, mas exigiria reimplementar loop, sessões, compactação, TUI e provedores. O Pi entrega isso com licença MIT e com a possibilidade de fork.
 
 ## Consequências
 
-**Mudanças no `design.md` e no `plan.md`:**
-- §8 "Codex-first" e "Sem chamadas próprias a modelos ou APIs de IA" deixam de valer.
-- §1: a Workbench passa a ser responsável pelo loop do agente. O raciocínio continua sendo do modelo.
-- O `workspace.json` e as restrições globais do `plan.md` ligadas ao núcleo Go precisam ser revistos.
+**Mudanças no repositório:**
+- O `design.md` é reescrito para o host. §8 "Codex-first" e "Sem chamadas próprias a modelos ou APIs de IA" deixam de valer, e pela §1 a Workbench passa a ser responsável pelo loop do agente. O raciocínio continua sendo do modelo.
+- O `docs/workbench/plan.md` (plano de implementação do Go) e o `workspace.json` saem junto com o Go.
 
 **Positivas:**
 - A §7 passa a ser cumprível de fato: auditoria de envio e redação antes do envio, verificadas com modelo real.
@@ -64,11 +63,13 @@ O núcleo Go **não** faz parte do caminho principal. Ele fica no repositório c
 - O projeto não precisa de configuração: os sandboxes prontos e a detecção cobrem o caso comum.
 
 **Negativas e custos:**
-- O produto passa a depender do Node.js (24 ou mais). A CLI Go fica sem papel no caminho principal.
+- O produto passa a depender do Node.js (24 ou mais).
+- O Codex e o Claude Code deixam de ser suportados: a Workbench só funciona como o próprio agente.
+- O `workbench new` (scaffold de monorepo) deixa de existir até o host ganhar um comando equivalente.
 - A Workbench passa a responder por autenticação, custo de modelo, UX e qualidade do agente. Antes, tudo isso era do Codex.
 - Dependência do roadmap da Earendil (o host usa o Pi 1.6.0), mitigada pela licença MIT.
 - Na conta do ChatGPT testada (2026-11-24), o Codex só aceita os modelos Luna (`gpt-6-luna` e `gpt-5.6-luna`); Sol, Terra e Astra retornam "not supported when using Codex with a ChatGPT account". Isso pode variar com o plano. O `gpt-6-luna` recusa algumas tarefas comuns sem motivo real ("voting systems"). A palavra "evidência" no prompt dispara a recusa quase sempre, e o host contorna isso com uma troca de palavra e uma nova tentativa.
-- O sandbox exige Linux (`bubblewrap`).
+- A V1 é só Linux: o sandbox usa `bubblewrap`.
 - O Pi não tem permissões nativas, então a camada de política da Workbench não é opcional.
 
 **Decisões derivadas do grill-me**, no estado em que ficaram:
@@ -76,16 +77,18 @@ O núcleo Go **não** faz parte do caminho principal. Ele fica no repositório c
 - **D3 (bash livre dentro de um sandbox):** implementada com `bubblewrap`.
 - **D4 (núcleo Go compila o escopo):** substituída pelos sandboxes prontos, pela detecção automática e pelas exceções do `.workbench.json`.
 
-## Em aberto
+## Pontos que estavam em aberto
 
-- O Codex e o Claude Code continuam suportados em modo orientado (degradado), pela CLI Go, ou deixam de ser suportados?
-- Os termos de uso do login do ChatGPT em harnesses de terceiros ainda não foram confirmados. O Pi oferece esse login oficialmente, mas os termos da OpenAI não foram lidos.
-- macOS: o sandbox atual não funciona lá.
-- Um canal remoto (por exemplo, WhatsApp) não pode juntar dados privados, entrada não confiável e saída para fora no mesmo fluxo (a "lethal trifecta"). Isso pede um ADR próprio antes de ser implementado.
+Decididos em 2026-11-24, antes do aceite:
+
+- **Codex e Claude Code em modo orientado:** não são suportados. A CLI Go é removida (ver "Decisão").
+- **Termos de uso do login do ChatGPT:** o login continua como padrão, com o risco registrado. Os termos da OpenAI não autorizam nem proíbem explicitamente o uso com harnesses de terceiros. Fontes secundárias relatam que a OpenAI tolera, mas a documentação dela recomenda API key para uso programático. Se a OpenAI restringir, a saída é trocar o padrão para um provedor com API key (`--model`), sem mudar o host.
+- **macOS:** fora da V1. O caminho futuro é o sandbox nativo do macOS (Seatbelt, via `sandbox-exec`), o mesmo que o Codex usa.
+- **Canal remoto** (por exemplo, WhatsApp): fora da V1. Pede um ADR próprio antes de ser implementado. Requisito já conhecido: nenhum fluxo pode juntar dados privados, entrada não confiável e saída para fora (a "lethal trifecta").
 
 ## Evidência
 
-- **Spike** [`spikes/pi-host`](../../spikes/pi-host/README.md) (2026-10-18, Pi 1.3.0, provider `faux`, sem rede). Um modelo roteirizado tentou ler fora do escopo, sair da raiz, passar por symlink, escrever fora do escopo e usar bash, e tudo foi bloqueado. Uma chave falsa foi redigida antes de chegar ao modelo.
+- **Spike** [`spikes/pi-host`](../../spikes/pi-host/README.md) (2026-10-18, Pi 1.3.0, provider `faux`, sem rede). Ele consome a CLI Go, que agora só existe no histórico do git, e fica como registro. Um modelo roteirizado tentou ler fora do escopo, sair da raiz, passar por symlink, escrever fora do escopo e usar bash, e tudo foi bloqueado. Uma chave falsa foi redigida antes de chegar ao modelo.
 - **Micro MVP** [`host/`](../../host/README.md) (2026-11-23/24, Pi 1.6.0, PR #5). A suíte de testes usa o provider `faux` e cobre:
   - sandboxes e o sandbox do bash;
   - aprovação interativa e os cinco workflows;
