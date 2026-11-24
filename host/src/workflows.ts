@@ -69,13 +69,13 @@ export const STEPS: Record<StepId, StepDef> = {
 		goal: "especificar o próximo incremento o bastante para construir e verificar",
 		inputs: [`${DIR}/brief.md`],
 		optionalInputs: [`${DIR}/decisions.md`],
-		output: `${DIR}/design.md`,
-		write: [`${DIR}/design.md`],
+		output: `${DIR}/technical-design.md`,
+		write: [`${DIR}/technical-design.md`],
 		bash: "none",
 		asksUser: false,
 		instructions: [
 			"Leia o brief, as decisões e o código existente que importa.",
-			`Escreva ${DIR}/design.md com: escopo do incremento, componentes e responsabilidades, fluxo de dados, comportamento em erro, testes que provam que funciona, e decisões tomadas.`,
+			`Escreva ${DIR}/technical-design.md com: escopo do incremento, componentes e responsabilidades, fluxo de dados, comportamento em erro, testes que provam que funciona, e decisões tomadas.`,
 			"Compare alternativas só onde mudariam o design. Marque claramente escolhas em aberto e premissas.",
 			"Não escreva código. O design será aprovado pelo usuário antes do build.",
 		],
@@ -83,7 +83,7 @@ export const STEPS: Record<StepId, StepDef> = {
 	build: {
 		id: "build",
 		goal: "implementar o design aprovado em lotes pequenos, com testes",
-		inputs: [`${DIR}/design.md`],
+		inputs: [`${DIR}/technical-design.md`],
 		optionalInputs: [`${DIR}/plan.md`, `${DIR}/decisions.md`],
 		output: `${DIR}/plan.md`,
 		write: ["**"],
@@ -101,7 +101,7 @@ export const STEPS: Record<StepId, StepDef> = {
 	review: {
 		id: "review",
 		goal: "avaliar a mudança contra o design, o plano e os testes",
-		inputs: [`${DIR}/design.md`],
+		inputs: [`${DIR}/technical-design.md`],
 		optionalInputs: [`${DIR}/plan.md`, `${DIR}/decisions.md`],
 		output: `${DIR}/review.md`,
 		write: [`${DIR}/review.md`],
@@ -199,7 +199,7 @@ export function approvalStatus(root: string, id: StepId, state = loadState(root)
 	const hash = fileHash(root, file);
 	if (!hash) return "missing";
 	const a = state.approvals[id];
-	if (!a) return "pending";
+	if (!a || a.file !== file) return "pending";
 	return a.sha256 === hash ? "approved" : "changed-after";
 }
 

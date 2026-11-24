@@ -80,7 +80,7 @@ test("grill-me sem brief não roda e aponta a etapa anterior", async () => {
 	await assert.rejects(runStep({ ...m, projectDir: root, id: "grill-me" }), /falta docs\/workbench\/brief\.md; rode "wb step run brainstorm" antes/);
 });
 
-test("design: sem a ferramenta perguntar e escrevendo só design.md", async () => {
+test("design: sem a ferramenta perguntar e escrevendo só technical-design.md", async () => {
 	const root = makeProject("design");
 	mkdirSync(path.join(root, "docs/workbench"), { recursive: true });
 	writeFileSync(path.join(root, "docs/workbench/brief.md"), "# Brief\n");
@@ -92,7 +92,7 @@ test("design: sem a ferramenta perguntar e escrevendo só design.md", async () =
 		),
 		(context) => {
 			results = toolResults(context);
-			return fauxAssistantMessage([fauxToolCall("write", { path: "docs/workbench/design.md", content: "# Design\n" })], { stopReason: "toolUse" });
+			return fauxAssistantMessage([fauxToolCall("write", { path: "docs/workbench/technical-design.md", content: "# Design\n" })], { stopReason: "toolUse" });
 		},
 		fauxAssistantMessage([fauxText("ok")]),
 	]);
@@ -108,7 +108,7 @@ test("design: sem a ferramenta perguntar e escrevendo só design.md", async () =
 test("build exige o design aprovado e inalterado", { skip: !sandboxAvailable() && "bwrap ausente" }, async () => {
 	const root = makeProject("build");
 	mkdirSync(path.join(root, "docs/workbench"), { recursive: true });
-	writeFileSync(path.join(root, "docs/workbench/design.md"), "# Design v1\n");
+	writeFileSync(path.join(root, "docs/workbench/technical-design.md"), "# Design v1\n");
 	const m = await faux([
 		fauxAssistantMessage(
 			[
@@ -123,7 +123,7 @@ test("build exige o design aprovado e inalterado", { skip: !sandboxAvailable() &
 
 	await assert.rejects(runStep({ ...m, projectDir: root, id: "build" }), /ainda não foi aprovado/);
 	approve(root, "design");
-	writeFileSync(path.join(root, "docs/workbench/design.md"), "# Design v2\n");
+	writeFileSync(path.join(root, "docs/workbench/technical-design.md"), "# Design v2\n");
 	await assert.rejects(runStep({ ...m, projectDir: root, id: "build" }), /mudou depois da aprovação/);
 	approve(root, "design");
 
@@ -136,7 +136,7 @@ test("build exige o design aprovado e inalterado", { skip: !sandboxAvailable() &
 test("review: sandbox com o projeto só leitura, escreve só review.md", { skip: !sandboxAvailable() && "bwrap ausente" }, async () => {
 	const root = makeProject("review");
 	mkdirSync(path.join(root, "docs/workbench"), { recursive: true });
-	writeFileSync(path.join(root, "docs/workbench/design.md"), "# Design\n");
+	writeFileSync(path.join(root, "docs/workbench/technical-design.md"), "# Design\n");
 	let results = "";
 	const m = await faux([
 		fauxAssistantMessage(

@@ -50,5 +50,7 @@ test("estado antigo (.workbench/estado.json) é migrado uma vez para state.json"
 	assert.deepEqual(s.runs.design, { runId: "r1", at: "t", outputWritten: true });
 	assert.ok(!existsSync(path.join(root, ".workbench/estado.json")));
 	assert.ok(JSON.parse(readFileSync(path.join(root, ".workbench/state.json"), "utf8")).approvals.design);
-	assert.equal(approvalStatus(root, "design"), "changed-after", "o hash migrado é comparado normalmente");
+	assert.equal(approvalStatus(root, "design"), "missing", "o design agora fica em technical-design.md");
+	writeFileSync(path.join(root, "docs/workbench/technical-design.md"), "# D\n");
+	assert.equal(approvalStatus(root, "design"), "pending", "aprovação gravada para outro caminho não vale");
 });

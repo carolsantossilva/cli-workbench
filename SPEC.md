@@ -48,11 +48,11 @@ O mesmo fluxo vale para um projeto novo e para um repositório existente. Criar 
 |---|---|---|---|---|---|
 | `brainstorm` | transformar a ideia em entendimento compartilhado: propósito, usuários, resultados e limites | `idea.md` e o projeto | `brief.md` | — | sim |
 | `grill-me` | desafiar o brief: ambiguidades, premissas, riscos e casos extremos | `brief.md` | `decisions.md` | — | sim |
-| `design` | especificar o próximo incremento o bastante para construir e verificar | `brief.md`, `decisions.md` e o código | `design.md` | — | não |
-| `build` | implementar o design aprovado em lotes pequenos, com testes | `design.md` aprovado | `plan.md` e o projeto | sandbox | não |
-| `review` | avaliar a mudança contra o design, o plano e os testes | `design.md`, `plan.md` e o diff | `review.md` | sandbox só leitura | não |
+| `design` | especificar o próximo incremento o bastante para construir e verificar | `brief.md`, `decisions.md` e o código | `technical-design.md` | — | não |
+| `build` | implementar o design aprovado em lotes pequenos, com testes | `technical-design.md` aprovado | `plan.md` e o projeto | sandbox | não |
+| `review` | avaliar a mudança contra o design, o plano e os testes | `technical-design.md`, `plan.md` e o diff | `review.md` | sandbox só leitura | não |
 
-- O `build` só roda com o `design.md` aprovado (`wb step approve design`, por sha256). Se o design mudar depois, a aprovação deixa de valer.
+- O `build` só roda com o `technical-design.md` aprovado (`wb step approve design`, por sha256). Se o design mudar depois, a aprovação deixa de valer.
 - Pesquisa arquitetural ampla fica fora da V1. O design resolve só o necessário para o incremento atual.
 
 ## 5. Artefatos
@@ -60,7 +60,7 @@ O mesmo fluxo vale para um projeto novo e para um repositório existente. Criar 
 Tudo fica em arquivos legíveis no próprio projeto:
 
 ```text
-docs/workbench/idea.md, brief.md, decisions.md, design.md, plan.md, review.md
+docs/workbench/idea.md, brief.md, decisions.md, technical-design.md, plan.md, review.md
 .workbench.json          exceções opcionais: sandbox padrão, globs negados, escrita extra
 .workbench/state.json    aprovações (sha256) e últimas execuções
 ```
