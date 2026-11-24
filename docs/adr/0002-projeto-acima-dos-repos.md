@@ -2,29 +2,33 @@
 
 - **Status:** proposed
 - **Escrito em:** 2026-11-24
-- **Escopo:** o que o `wb` entende por "projeto", onde cada etapa roda e onde ficam estado e auditoria.
-- **Decidido em 2026-11-24:** só o item 5 da Decisão (o `wb` cria as worktrees). O resto continua proposto.
+- **Escopo:** o que o `wb` entende por "projeto", onde ficam as especificações, onde cada etapa roda e onde ficam estado e auditoria.
+- **Decidido em 2026-11-24:** só os itens 4 (as especificações ficam num repo ou numa issue, conforme o contexto) e 6 (o `wb` cria as worktrees) da Decisão. O resto continua proposto.
 - **Implementação:** parcial. A auditoria já foi para `<projeto>/.workbench/runs/` (PR #5). Hoje "projeto" ainda é um único diretório, na prática um repo. O resto deste ADR não foi implementado.
 
 ## Contexto
 
 Hoje o `wb` trata o diretório passado em `-C` (ou o atual) como o projeto inteiro. Esse diretório vira a raiz do sandbox, guarda `docs/workbench/` (as saídas das etapas) e `.workbench/` (estado, aprovações e, desde a PR #5, a auditoria). Na prática, isso equivale a um repositório.
 
-Um jeito comum de organizar trabalho não cabe nisso. Uma ideia ou produto tem uma pasta própria, com a especificação, e um ou mais repositórios de código. Os repositórios costumam entrar como worktrees, uma por branch, dentro dessa pasta. Exemplo:
+Um jeito comum de organizar trabalho não cabe nisso. Uma ideia ou produto tem uma pasta própria e um ou mais repositórios de código, que costumam entrar como worktrees, uma por branch, dentro dessa pasta:
 
 ```
 projetos/<p>/
-├── docs/workbench/          # ideia, brief, design, plano, review
-├── .workbench/              # estado e auditoria do wb
+├── .workbench.json              # quais repos fazem parte do projeto
+├── .workbench/                  # estado e auditoria do wb
 └── .worktree/<repo>/<branch>/   # código, um diretório por branch
 ```
 
-Nesse arranjo, a especificação não pertence a nenhum repo: o design de um produto pode envolver vários. Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado das etapas da especificação que os originou. Também obriga a escolher um repo para guardar documentos que são do projeto.
+Essa pasta não é um repositório git: ela organiza o trabalho, mas não guarda decisões. As decisões (ideia, brief, design, plano, review) precisam de histórico e de revisão. Por isso, devem ficar onde o contexto pede:
+- num **repo**, quando a decisão é sobre aquele código;
+- numa **issue**, quando é uma discussão, envolve vários repos ou ainda não tem repo.
+
+Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado das etapas do projeto a que pertencem.
 
 ## Decisão
 
 1. **Dois níveis: projeto e repo.**
-   - O **projeto** é a pasta da especificação. Ela guarda `docs/workbench/` e `.workbench/`, ou seja, estado, aprovações e auditoria de todos os runs do projeto.
+   - O **projeto** é a pasta de trabalho. Ela guarda `.workbench.json`, `.workbench/` (estado, aprovações e auditoria de todos os runs) e as worktrees. Ela não guarda especificações.
    - O **repo** é onde o código muda: um repositório git ou uma worktree dentro do projeto.
    - Um repositório sem projeto em volta continua funcionando como hoje. Ele é o próprio projeto, com um repo só.
 
@@ -37,26 +41,41 @@ Nesse arranjo, a especificação não pertence a nenhum repo: o design de um pro
    - Se não achar, o projeto é a raiz git do diretório atual, ou o próprio diretório atual. É o comportamento de hoje.
    - `-C` continua indicando o projeto explicitamente.
 
-4. **Cada etapa roda no seu nível.**
-   - `brainstorm`, `grill-me` e `design` rodam no **projeto**. Leem o projeto inteiro, incluindo os repos, e escrevem só em `docs/workbench/`.
-   - `build` e `wb run` rodam num **repo**, escolhido com `--repo <caminho ou nome>` ou pelo diretório atual quando ele está dentro de um repo do projeto. A raiz do sandbox é o repo. A especificação do projeto entra como leitura, exceto o `plan.md`, que o `build` atualiza.
-   - `review` roda no repo e escreve o resultado no projeto.
+4. **As especificações ficam num repo ou numa issue, conforme o contexto.**
+   - **Num repo:** em `docs/workbench/` daquele repo, como hoje. Entram no git, no histórico e nas PRs do código a que se referem.
+   - **Numa issue:** cada etapa vira o corpo da issue ou um comentário nela. Serve para discussões, decisões que envolvem vários repos, ou ideias que ainda não têm repo.
+   - O destino é escolhido por run (ex.: `--spec repo:<nome>` ou `--spec issue:<repo>#<n>`). Um padrão pode ficar no `.workbench.json`.
+   - Projetos que já têm `docs/workbench/` dentro de um repo continuam funcionando sem migração: é o destino "repo".
+
+5. **Cada etapa roda no seu nível.**
+   - `brainstorm`, `grill-me` e `design` leem o projeto inteiro, incluindo os repos, e escrevem só no destino da especificação.
+   - `build` e `wb run` rodam num **repo**, escolhido com `--repo <caminho ou nome>` ou pelo diretório atual quando ele está dentro de um repo do projeto. A raiz do sandbox é o repo. A especificação entra como leitura, exceto o plano, que o `build` atualiza.
    - Auditoria e estado ficam sempre no `.workbench/` do projeto, qualquer que seja o nível do run.
 
-5. **O `wb` cria as worktrees.** Um comando (nome a definir, ex.: `wb repo checkout <repo> <branch>`) cria a worktree de um repo declarado em `.worktree/<repo>/<branch>`, a partir da branch base atualizada. O mesmo comando reabre a worktree se ela já existir. O `build` pode pedir uma worktree nova em vez de exigir que ela já exista. O lugar dos clones (dentro do projeto ou numa pasta compartilhada entre projetos) fica configurável no `.workbench.json`.
+6. **O `wb` cria as worktrees.** Um comando (nome a definir, ex.: `wb repo checkout <repo> <branch>`) cria a worktree de um repo declarado em `.worktree/<repo>/<branch>`, a partir da branch base atualizada. O mesmo comando reabre a worktree se ela já existir. O `build` pode pedir uma worktree nova em vez de exigir que ela já exista. O lugar dos clones (dentro do projeto ou numa pasta compartilhada entre projetos) fica configurável no `.workbench.json`.
 
-6. **Symlinks continuam bloqueados.** Um link dentro do projeto que aponta para fora dele, como um link para o clone original, segue negado. Isso também impede o agente de mexer num clone que deveria ficar limpo.
+7. **Symlinks continuam bloqueados.** Um link dentro do projeto que aponta para fora dele, como um link para o clone original, segue negado. Isso também impede o agente de mexer num clone que deveria ficar limpo.
 
 ## Alternativas consideradas
 
-- **Manter "projeto = um repo" (status quo).** É o mais simples, mas a especificação de um produto com vários repos precisaria morar num deles ou ser duplicada. A auditoria ficaria espalhada pelos repos.
+- **Manter "projeto = um repo" (status quo).** É o mais simples, mas um produto com vários repos não tem onde guardar o estado e a auditoria comuns, e a auditoria fica espalhada pelos repos.
+- **Especificações na pasta do projeto.** A pasta não é um repo git, então as decisões ficariam sem histórico nem revisão. Rejeitada em 2026-11-24.
+- **A pasta do projeto vira um repo git só de especificações.** Daria histórico, mas cria um repo a mais por projeto e afasta a decisão do código ou da discussão a que ela pertence. Rejeitada em 2026-11-24.
 - **Ler o manifesto do script de organização diretamente.** Funcionaria para quem usa esse script, mas prende o `wb` a uma convenção pessoal. Um `.workbench.json` gerado pelo script dá o mesmo resultado sem esse acoplamento.
 - **Auditoria global em `~/.local/state/workbench/runs/` (como era antes da PR #5).** Misturava runs de todos os projetos e afastava a auditoria do projeto a que ela se refere. Foi trocada por `.workbench/runs/` dentro do projeto, que se ignora no git sozinha e que o agente não lê.
 
 ## Consequências
 
-- O sandbox do `build` passa a ter duas áreas de escrita: o repo e o `plan.md` do projeto. Hoje a raiz é uma só, então `sandbox.ts` e `policy.ts` precisam aceitar mais de uma raiz, cada uma com suas regras.
-- `wb status` mostra as etapas do projeto e, para cada repo, os runs que aconteceram nele.
+- **Issues são um canal externo.** Publicar uma etapa numa issue envia conteúdo para fora da máquina, então:
+  - quem publica é o host, não o agente, e com confirmação do usuário;
+  - o agente escreve um rascunho local, e o host publica;
+  - na leitura, o corpo e os comentários de uma issue são entrada não confiável, porque outras pessoas podem comentar;
+  - um mesmo fluxo não deve juntar dados privados, essa entrada e o envio para fora (a "lethal trifecta" do ADR 0001).
+- **Aprovação do design:**
+  - num repo, continua sendo o sha256 do arquivo;
+  - numa issue, é o sha256 do texto aprovado, guardado em `.workbench/state.json` junto com a referência da issue (e do comentário, se o design for um).
+- O sandbox do `build` pode ter duas áreas de escrita: o repo do código e o plano, quando a especificação está em outro repo. Hoje a raiz é uma só, então `sandbox.ts` e `policy.ts` precisam aceitar mais de uma raiz, cada uma com suas regras.
+- `wb status` mostra as etapas do projeto, onde está cada especificação e, para cada repo, os runs que aconteceram nele.
 - O `git status` usado para listar os arquivos alterados roda em cada repo tocado, não só na raiz.
 - Numa worktree, `.git` é um arquivo que aponta para o clone (`gitdir: ...`), que pode estar fora do projeto. O `git worktree add` e o `fetch` rodam no host, fora do sandbox. Dentro do sandbox, o `.git` da worktree continua só leitura, como hoje, e o clone externo fica fora da raiz. Por isso o agente não faz commit; commits ficam com o usuário ou com um passo do host.
 - Projetos de um repo só não mudam: o `.workbench.json` sem `repos` continua valendo como hoje.
@@ -65,5 +84,8 @@ Nesse arranjo, a especificação não pertence a nenhum repo: o design de um pro
 
 - O formato exato de `repos`: só globs, ou também nomes (`{"workbench": ".worktree/workbench/*"}`) para o `--repo` aceitar um nome curto.
 - Um `build` que precise mexer em dois repos ao mesmo tempo: um run por repo, ou um sandbox com vários repos.
-- **Onde ficam as especificações versionadas.** Hoje `docs/workbench/` (ideia, brief, design, plano) fica dentro do repo, então entra no git e no histórico dele. Com o projeto acima dos repos, a pasta do projeto pode não ser um repositório git, e aí as especificações ficariam sem histórico. Ou a pasta do projeto vira um repo git próprio, ou as especificações continuam num dos repos.
-- **Migração.** Projetos que já têm `docs/workbench/` dentro de um repo: mover para o projeto (com um comando do `wb`), ou continuar lendo de onde estiver.
+- **Issues:**
+  - qual provedor: só GitHub (via `gh`) na V1?
+  - como etapas viram issue: uma issue por etapa, ou uma issue com um comentário por etapa?
+  - quais comentários o agente lê: só os do dono do projeto, ou todos, marcados como não confiáveis?
+- Quem escolhe o destino quando não há padrão: o `wb` pergunta no primeiro `brainstorm`, ou exige `--spec`.
