@@ -170,7 +170,12 @@ function migrateLegacyState(root: string): void {
 	const legacy = path.join(root, ".workbench", "estado.json");
 	if (!existsSync(legacy) || existsSync(statePath(root))) return;
 	type Legacy = { aprovacoes?: State["approvals"]; execucoes?: Partial<Record<StepId, { runId: string; at: string; saida: boolean }>> };
-	const old = JSON.parse(readFileSync(legacy, "utf8")) as Legacy;
+	let old: Legacy;
+	try {
+		old = JSON.parse(readFileSync(legacy, "utf8")) as Legacy;
+	} catch {
+		return; // corrompido: fica onde está, sem migrar e sem travar o resto
+	}
 	const runs: State["runs"] = {};
 	for (const [id, r] of Object.entries(old.execucoes ?? {})) if (r) runs[id as StepId] = { runId: r.runId, at: r.at, outputWritten: r.saida };
 	saveState(root, { approvals: old.aprovacoes ?? {}, runs });
