@@ -218,6 +218,10 @@ export function approve(root: string, id: StepId): Approval {
 export function preflight(root: string, def: StepDef): string | undefined {
 	const missing = def.inputs.filter((f) => !existsSync(path.join(root, f)));
 	if (missing.length > 0) {
+		const legacy = `${DIR}/design.md`;
+		if (missing.includes(STEPS.design.output) && existsSync(path.join(root, legacy))) {
+			return `o design agora fica em ${STEPS.design.output}; renomeie ${legacy} para esse nome e aprove de novo: wb step approve design`;
+		}
 		const from = STEP_IDS.find((w) => missing.includes(STEPS[w].output));
 		return `falta ${missing.join(", ")}${from ? `; rode "wb step run ${from}" antes` : def.id === "brainstorm" ? '; passe a ideia: wb step run brainstorm "sua ideia"' : ""}`;
 	}

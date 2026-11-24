@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { parseArgs } from "../src/args.ts";
-import { approvalStatus, loadState } from "../src/workflows.ts";
+import { approvalStatus, loadState, preflight, STEPS } from "../src/workflows.ts";
 
 test("flags antes ou depois do comando, nas duas formas", () => {
 	const a = parseArgs(["-C", "/p", "step", "run", "build", "--sandbox=docs-only", "-m", "x/y", "--thinking", "low", "--no-input", "só", "o", "lote", "2"], "/cwd");
@@ -51,6 +51,7 @@ test("estado antigo (.workbench/estado.json) é migrado uma vez para state.json"
 	assert.ok(!existsSync(path.join(root, ".workbench/estado.json")));
 	assert.ok(JSON.parse(readFileSync(path.join(root, ".workbench/state.json"), "utf8")).approvals.design);
 	assert.equal(approvalStatus(root, "design"), "missing", "o design agora fica em technical-design.md");
+	assert.match(preflight(root, STEPS.build) ?? "", /renomeie docs\/workbench\/design\.md/);
 	writeFileSync(path.join(root, "docs/workbench/technical-design.md"), "# D\n");
 	assert.equal(approvalStatus(root, "design"), "pending", "aprovação gravada para outro caminho não vale");
 });

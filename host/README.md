@@ -62,7 +62,7 @@ wb status                   # onde está cada etapa e qual é o próximo passo
 Todos os arquivos ficam em `docs/workbench/`. Cada etapa roda numa sessão nova, então o contexto passa de uma etapa para a outra só pelos arquivos.
 
 - **Entradas:** uma etapa não roda sem as entradas obrigatórias, e o erro diz qual etapa rodar antes.
-- **Aprovação do design:** o `build` só roda com o design aprovado. `wb step approve` grava o sha256 do `technical-design.md` em `.workbench/state.json` (vale colocar `.workbench/` no `.gitignore` do projeto). Se o design mudar depois, a aprovação deixa de valer e o build volta a ser barrado.
+- **Aprovação do design:** o `build` só roda com o design aprovado. `wb step approve` grava o sha256 do `technical-design.md` em `.workbench/state.json` (vale colocar `.workbench/` no `.gitignore` do projeto). Se o design mudar depois, a aprovação deixa de valer e o build volta a ser barrado. Projetos com o `design.md` da versão anterior: renomeie para `technical-design.md` e aprove de novo.
 - **Pedido extra:** nas etapas depois do brainstorm, o texto passado vira um pedido extra (ex.: `wb step run build "só o lote 2"`).
 - **Perguntas:** no `brainstorm` e no `grill-me`, o agente usa a ferramenta `ask_user`. Com `--no-input`, ou sem terminal, ele decide com premissas explícitas.
 
