@@ -58,6 +58,10 @@ ${COMMON_OPTIONS}
 };
 
 const color = process.stderr.isTTY && !process.env.NO_COLOR;
+// Texto vindo do modelo (caminhos, comandos, perguntas) não pode trazer sequências ANSI
+// ou quebras de linha que falsifiquem o que aparece no terminal.
+const safe = (s: string) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+const oneLine = (s: string) => safe(s).replace(/\n/g, "\\n");
 const dim = (s: string) => (color ? `\x1b[2m${s}\x1b[0m` : s);
 const bold = (s: string) => (color ? `\x1b[1m${s}\x1b[0m` : s);
 
@@ -65,7 +69,7 @@ function prompts(rl: Interface | undefined) {
 	if (!rl) return { ask: undefined, askUser: undefined };
 	const ask = async (req: ApprovalRequest): Promise<ApprovalAnswer> => {
 		const verbo = req.mode === "write" ? "ESCREVER em" : "LER";
-		process.stderr.write(`\n${bold(`? O agente quer ${verbo} ${req.path}`)} ${dim(`(${req.reason})`)}\n`);
+		process.stderr.write(`\n${bold(`? O agente quer ${verbo} ${oneLine(req.path)}`)} ${dim(`(${oneLine(req.reason)})`)}\n`);
 		for (;;) {
 			const a = (await rl.question("  [s] sim, desta vez   [t] sim, até o fim desta execução   [n] não  > ")).trim().toLowerCase();
 			if (a === "s") return "once";
@@ -74,14 +78,14 @@ function prompts(rl: Interface | undefined) {
 		}
 	};
 	const askUser = async (question: string): Promise<string> => {
-		process.stderr.write(`\n${bold("? Pergunta do agente:")} ${question}\n`);
+		process.stderr.write(`\n${bold("? Pergunta do agente:")} ${safe(question)}\n`);
 		return rl.question("  > ");
 	};
 	return { ask, askUser };
 }
 
 const onDecision = (d: Decision) =>
-	process.stderr.write(dim(`\n[${d.allowed ? (d.by === "user" ? "liberado" : "ok") : "BLOQUEADO"}] ${d.tool} ${d.target}${d.allowed ? "" : ` (${d.reason})`}\n`));
+	process.stderr.write(dim(`\n[${d.allowed ? (d.by === "user" ? "liberado" : "ok") : "BLOQUEADO"}] ${oneLine(d.tool)} ${oneLine(d.target)}${d.allowed ? "" : ` (${oneLine(d.reason ?? "")})`}\n`));
 
 function summary(r: RunResult) {
 	const blocked = r.decisions.filter((d) => !d.allowed).length;

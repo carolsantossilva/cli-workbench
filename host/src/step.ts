@@ -1,8 +1,9 @@
 // Roda uma etapa de workflow: confere entradas e aprovação, monta o escopo da
 // etapa, executa e registra o resultado no estado do projeto.
-import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { closeSync, constants, existsSync, mkdirSync, openSync, realpathSync, writeSync } from "node:fs";
 import path from "node:path";
 import { type RunOptions, type RunResult, runTask } from "./host.ts";
+import { resolveInRoot } from "./policy.ts";
 import { loadProjectConfig } from "./profiles.ts";
 import {
 	type ApprovalStatus,
@@ -30,14 +31,36 @@ export interface StepRunResult extends RunResult {
 	approval: ApprovalStatus;
 }
 
+/**
+ * Grava idea.md sem seguir symlinks: o host escreve fora do sandbox, e um symlink
+ * deixado pelo bash (num build anterior) levaria a escrita para .git, .workbench
+ * ou para fora do projeto.
+ */
+function writeIdea(root: string, content: string): void {
+	const check = () => {
+		const r = resolveInRoot(root, IDEA);
+		if (!r.allow || r.rel !== IDEA) {
+			throw new Error(`${IDEA} (ou uma pasta acima dele) é um symlink ou aponta para fora de ${IDEA}; remova e rode de novo`);
+		}
+	};
+	check();
+	mkdirSync(path.join(root, path.dirname(IDEA)), { recursive: true });
+	check();
+	const fd = openSync(path.join(root, IDEA), constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o644);
+	try {
+		writeSync(fd, content);
+	} finally {
+		closeSync(fd);
+	}
+}
+
 export async function runStep(o: StepRunOptions): Promise<StepRunResult> {
 	const root = realpathSync(o.projectDir);
 	const def = STEPS[o.id];
 	if (!def) throw new Error(`etapa desconhecida "${o.id}"`);
 
 	if (o.id === "brainstorm" && o.note) {
-		mkdirSync(path.join(root, path.dirname(IDEA)), { recursive: true });
-		writeFileSync(path.join(root, IDEA), `# Ideia\n\n${o.note.trim()}\n`);
+		writeIdea(root, `# Ideia\n\n${o.note.trim()}\n`);
 	}
 	const blocker = preflight(root, def);
 	if (blocker) throw new Error(`não dá para rodar "${o.id}": ${blocker}`);

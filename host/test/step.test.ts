@@ -2,7 +2,7 @@
 // pergunta ao usuário e aprovação do design por hash antes do build.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
@@ -164,4 +164,20 @@ test("instruções das etapas não usam \"evidência\" (dispara recusa espúria 
 		const def = STEPS[id];
 		assert.doesNotMatch([def.goal, ...def.instructions].join("\n"), /evid[êe]nc/i, id);
 	}
+});
+
+test("brainstorm não segue symlink ao gravar idea.md", async () => {
+	const root = makeProject("idea-symlink");
+	mkdirSync(path.join(root, "docs/workbench"), { recursive: true });
+	const gitConfig = readFileSync(path.join(root, ".git/config"), "utf8");
+	symlinkSync("../../.git/config", path.join(root, "docs/workbench/idea.md"));
+	const m = await faux([fauxAssistantMessage([fauxText("nada")])]);
+	await assert.rejects(runStep({ ...m, projectDir: root, id: "brainstorm", note: "ideia" }), /symlink/);
+	assert.equal(readFileSync(path.join(root, ".git/config"), "utf8"), gitConfig);
+
+	const root2 = makeProject("idea-dir-symlink");
+	mkdirSync(path.join(root2, "docs"), { recursive: true });
+	symlinkSync("../.workbench", path.join(root2, "docs/workbench"));
+	await assert.rejects(runStep({ ...m, projectDir: root2, id: "brainstorm", note: "ideia" }), /symlink/);
+	assert.ok(!existsSync(path.join(root2, ".workbench/idea.md")));
 });

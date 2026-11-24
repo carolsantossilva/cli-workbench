@@ -128,6 +128,9 @@ npm run typecheck
 - Na conta do ChatGPT testada (2026-11-24), o Codex só aceita os modelos Luna (`openai-codex/gpt-6-luna` e `openai-codex/gpt-5.6-luna`). Sol, Terra e Astra retornam "not supported when using Codex with a ChatGPT account", e o erro aparece na hora. Isso pode variar com o plano do ChatGPT.
 - O `gpt-6-luna` às vezes recusa uma tarefa comum, com justificativas sem relação com ela (ex.: "voting systems"). O host detecta a recusa e pede uma vez para continuar de onde parou (evento `refusal` na auditoria). Se recusar de novo, rode a etapa outra vez: o `plan.md` guarda o progresso. A palavra "evidência" num prompt dispara essa recusa quase sempre (medido: 6/6 com ela, 0/6 sem ela). O host troca "evidência(s)" por "prova(s)" no seu pedido antes de enviar (evento `prompt_rewrite` na auditoria); as instruções das etapas já não a usam.
 - O sandbox só funciona no Linux (bubblewrap).
+- As ferramentas `read`, `write`, `edit`, `grep`, `find` e `ls` rodam no host, fora do bwrap. A checagem resolve symlinks na hora, mas no `workspace-write` o bash ainda poderia trocar um symlink entre a checagem e a abertura do arquivo (TOCTOU).
+- A guarda de `.git` criado durante o run não olha dentro de `node_modules/` nem abaixo de 12 níveis.
+- `wb scope` e `wb status` também fazem a limpeza de um run interrompido, e nesse caso os eventos `violation` só aparecem no stderr, não na auditoria.
 - Nas toolchains da home, as credenciais são procuradas só até 3 níveis de profundidade, e o `~/.cargo/config.toml` continua visível.
 - A busca de arquivos sensíveis a mascarar pula `node_modules/` e vai até 12 níveis de profundidade. Ela roda antes de cada comando, então um arquivo sensível criado durante o próprio comando não é mascarado.
 - A troca de "evidência" vale só para o seu pedido, não para arquivos do projeto que o agente lê: um documento com a palavra ainda pode causar recusa no meio da execução.
