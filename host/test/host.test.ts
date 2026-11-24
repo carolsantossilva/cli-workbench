@@ -2,7 +2,7 @@
 // O "modelo" tenta ações fora do perfil; o host precisa barrar e o sandbox conter.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
@@ -14,6 +14,7 @@ import { loadProjectConfig } from "../src/profiles.ts";
 import { matchesAny } from "../src/policy.ts";
 import { ALWAYS_DENY, WRITE_DENY } from "../src/profiles.ts";
 import { buildSandboxArgs, sandboxAvailable, wrapCommand } from "../src/sandbox.ts";
+import { saveState } from "../src/workflows.ts";
 
 const FAKE_KEY = "sk-ant-api03-" + "FAKE".repeat(10);
 const tmp = mkdtempSync(path.join(os.tmpdir(), "wb-host-test-"));
@@ -556,7 +557,7 @@ test(".workbench que é symlink é recusado", async () => {
 	const outside = path.join(tmp, "fora-do-projeto");
 	mkdirSync(outside);
 	symlinkSync(outside, path.join(root, ".workbench"));
-	await assert.rejects(runTask({ projectDir: root, task: "x", sandbox: "read-only" }), /não é um diretório \(symlink\?\)/);
+	await assert.rejects(runTask({ projectDir: root, task: "x", sandbox: "read-only" }), /\.workbench é um symlink/);
 	assert.ok(!existsSync(path.join(outside, ".gitignore")));
 });
 
@@ -569,4 +570,28 @@ test("sandbox mascara .workbench com um mount só, qualquer que seja o número d
 	const real = realpathSync(path.join(root, ".workbench"));
 	const i = args.indexOf("--tmpfs", args.indexOf(real));
 	assert.deepEqual(args.slice(i, i + 4), ["--tmpfs", real, "--remount-ro", real], "uma pasta vazia e só leitura no lugar de .workbench");
+});
+
+test("symlinks dentro de .workbench (vindos do repositório) não são seguidos", async () => {
+	const outside = path.join(tmp, "alvo-externo");
+	mkdirSync(outside);
+
+	const runsLink = makeProject("wb-runs-link");
+	mkdirSync(path.join(runsLink, ".workbench"));
+	symlinkSync(outside, path.join(runsLink, ".workbench/runs"));
+	await assert.rejects(runTask({ projectDir: runsLink, task: "x", sandbox: "read-only" }), /runs é um symlink/);
+
+	const ignoreLink = makeProject("wb-ignore-link");
+	mkdirSync(path.join(ignoreLink, ".workbench"));
+	symlinkSync(path.join(outside, "plantado"), path.join(ignoreLink, ".workbench/.gitignore"));
+	await assert.rejects(runTask({ projectDir: ignoreLink, task: "x", sandbox: "read-only" }), /\.gitignore é um symlink/);
+
+	const stateLink = makeProject("wb-state-link");
+	mkdirSync(path.join(stateLink, ".workbench"));
+	writeFileSync(path.join(outside, "state-alvo.json"), "original\n");
+	symlinkSync(path.join(outside, "state-alvo.json"), path.join(stateLink, ".workbench/state.json"));
+	assert.throws(() => saveState(stateLink, { approvals: {}, runs: {} } as never), /state\.json é um symlink/);
+
+	assert.deepEqual(readdirSync(outside).sort(), ["state-alvo.json"], "nada foi criado fora do projeto");
+	assert.equal(readFileSync(path.join(outside, "state-alvo.json"), "utf8"), "original\n");
 });
