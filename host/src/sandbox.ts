@@ -4,9 +4,13 @@ import { existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { matchesAny } from "./policy.ts";
+import { ALWAYS_DENY } from "./profiles.ts";
 
 // Ferramentas instaladas na home que os comandos do projeto costumam precisar (só leitura).
 const HOME_TOOLCHAINS = [".nvm", ".volta", ".bun", "go", ".cargo", ".rustup", ".local/share/pnpm"];
+// Credenciais que ficam dentro dessas pastas (ex.: ~/.cargo/credentials.toml do `cargo login`),
+// mascaradas com /dev/null. A busca vai só até 3 níveis: as toolchains têm milhares de arquivos.
+const TOOLCHAIN_DENY = [...ALWAYS_DENY, "**/credentials", "**/credentials.toml", "**/credentials*"];
 // Só dependências instaladas e o próprio .git ficam de fora da busca de arquivos sensíveis.
 const SKIP_DIRS = new Set(["node_modules", ".git"]);
 // Caminhos que o bash nunca pode alterar: com eles, um comando no sandbox poderia
@@ -35,9 +39,12 @@ export function findDeniedFiles(root: string, deny: readonly string[], maxDepth 
 		}
 		for (const e of entries) {
 			const r = rel ? `${rel}/${e.name}` : e.name;
-			if (e.isDirectory()) {
+			if (e.name === ".git") {
+				// .git aninhado, pasta ou arquivo (submódulo/worktree: "gitdir: ..."), entra na
+				// lista para ser montado só leitura; o da raiz é tratado em PROTECTED.
+				if (rel) out.push(path.join(dir, e.name));
+			} else if (e.isDirectory()) {
 				if (!SKIP_DIRS.has(e.name)) walk(path.join(dir, e.name), r, depth + 1);
-				else if (e.name === ".git" && rel) out.push(path.join(dir, e.name));
 			} else if (matchesAny(r, deny)) {
 				out.push(path.join(dir, e.name));
 			}
@@ -60,7 +67,9 @@ export function buildSandboxArgs(root: string, cwd: string, deny: readonly strin
 	];
 	for (const t of HOME_TOOLCHAINS) {
 		const p = path.join(home, t);
-		if (existsSync(p)) args.push("--ro-bind", p, p);
+		if (!existsSync(p)) continue;
+		args.push("--ro-bind", p, p);
+		for (const f of findDeniedFiles(p, TOOLCHAIN_DENY, 3)) args.push("--ro-bind", "/dev/null", f);
 	}
 	args.push(writable ? "--bind" : "--ro-bind", realRoot, realRoot);
 	if (writable) {

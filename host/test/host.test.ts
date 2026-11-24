@@ -13,7 +13,7 @@ import { beginGuard } from "../src/guard.ts";
 import { loadProjectConfig } from "../src/profiles.ts";
 import { matchesAny } from "../src/policy.ts";
 import { ALWAYS_DENY, WRITE_DENY } from "../src/profiles.ts";
-import { sandboxAvailable } from "../src/sandbox.ts";
+import { sandboxAvailable, wrapCommand } from "../src/sandbox.ts";
 
 const FAKE_KEY = "sk-ant-api03-" + "FAKE".repeat(10);
 const tmp = mkdtempSync(path.join(os.tmpdir(), "wb-host-test-"));
@@ -362,4 +362,42 @@ test("filtro de grep tira também linhas de contexto de arquivos negados", () =>
 	writeFileSync(path.join(root, "server.key"), "segredo\n");
 	const out = ["src/app.ts:1:export const x = 1;", "server.key-1-segredo", "server.key:2:segredo", "./server.key", "src/app.ts-2-fim"].join("\n");
 	assert.equal(dropDeniedLines(out, root, ["**/*.key"]), ["src/app.ts:1:export const x = 1;", "src/app.ts-2-fim"].join("\n"));
+});
+
+test("sandbox: .git aninhado que é arquivo (submódulo) não pode ser redirecionado pelo bash", { skip: !sandboxAvailable() && "bwrap ausente" }, async () => {
+	const root = makeProject("submodulo");
+	mkdirSync(path.join(root, "sub"), { recursive: true });
+	writeFileSync(path.join(root, "sub/.git"), "gitdir: ../.git/modules/sub\n");
+	let sent = "";
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage(
+			[fauxToolCall("bash", { command: "mkdir -p evil && echo 'gitdir: ../evil' > sub/.git 2>&1; echo FIM" })],
+			{ stopReason: "toolUse" },
+		),
+		(context) => {
+			sent = toolOutputs(context);
+			return fauxAssistantMessage([fauxText("ok")]);
+		},
+	]);
+	await runTask({ projectDir: root, task: "x", profile: "codigo", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	assert.ok(sent.includes("FIM"));
+	assert.equal(readFileSync(path.join(root, "sub/.git"), "utf8"), "gitdir: ../.git/modules/sub\n");
+});
+
+test("sandbox: credenciais dentro das toolchains da home ficam mascaradas", { skip: !sandboxAvailable() && "bwrap ausente" }, () => {
+	const fakeHome = path.join(tmp, "home-falsa");
+	mkdirSync(path.join(fakeHome, ".cargo/bin"), { recursive: true });
+	writeFileSync(path.join(fakeHome, ".cargo/credentials.toml"), "[registry]\ntoken = \"cio-segredo\"\n");
+	writeFileSync(path.join(fakeHome, ".cargo/bin/ferramenta"), "binario\n");
+	const root = makeProject("toolchain");
+	const oldHome = process.env.HOME;
+	process.env.HOME = fakeHome;
+	try {
+		const cmd = wrapCommand("cat ~/.cargo/credentials.toml; cat ~/.cargo/bin/ferramenta", root, root, []);
+		const out = execFileSync("/bin/bash", ["-c", cmd], { encoding: "utf8" });
+		assert.ok(out.includes("binario"), "a toolchain continua visível");
+		assert.ok(!out.includes("cio-segredo"), "o token do cargo fica mascarado");
+	} finally {
+		process.env.HOME = oldHome;
+	}
 });
