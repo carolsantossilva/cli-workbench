@@ -1,10 +1,9 @@
 # 0002 — Projeto como nível acima dos repositórios
 
-- **Status:** proposed
-- **Escrito em:** 2026-11-24
+- **Status:** accepted
+- **Escrito em:** 2026-11-24.
+- **Aceito em:** 2026-11-24, por carolsantossilva, com as decisões tomadas na revisão: repos detectados e `.workbench.json` só com exceções, `.workbench/` como marcador do projeto, especificações num repo ou numa issue (só GitHub, só texto de admins) e o `wb` criando as worktrees. Os demais itens foram propostos na mesma revisão e aceitos junto.
 - **Escopo:** o que o `wb` entende por "projeto", onde ficam as especificações, onde cada etapa roda e onde ficam estado e auditoria.
-- **Decidido em 2026-11-24:** repos detectados e `.workbench.json` só com exceções (item 2); `.workbench/` como marcador do projeto (item 3); especificações num repo ou numa issue, com issues só do GitHub e só texto de admins (item 4); o `wb` cria as worktrees (item 6).
-- **Propostos em 2026-11-24, para revisão:** como as configurações de repo e projeto se combinam (item 3), o nome curto e o `build` de um repo por run (item 5), o destino sem padrão (item 4), a profundidade da busca (item 2) e o canal remoto (item 8). Não há pontos em aberto; se estes forem aceitos, o ADR vira `accepted`.
 - **Implementação:** parcial. A auditoria já foi para `<projeto>/.workbench/runs/` (PR #5). Hoje "projeto" ainda é um único diretório, na prática um repo. O resto deste ADR não foi implementado.
 
 ## Contexto
@@ -101,6 +100,6 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 - Numa worktree, `.git` é um arquivo que aponta para o clone (`gitdir: ...`), que pode estar fora do projeto. O `git worktree add` e o `fetch` rodam no host, fora do sandbox. Dentro do sandbox, o `.git` da worktree continua só leitura, como hoje, e o clone externo fica fora da raiz. Por isso o agente não faz commit; commits ficam com o usuário ou com um passo do host.
 - Projetos de um repo só não mudam: sem `.workbench/` acima do repo, o repo continua sendo o projeto, e o `.workbench.json` dele continua valendo.
 
-## Em aberto antes da aceitação
+## Em aberto
 
-Nenhum. Os itens propostos estão listados no cabeçalho.
+Nenhum.

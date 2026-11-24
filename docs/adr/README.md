@@ -5,4 +5,4 @@ Decisões consequentes da Workbench. Formato: Contexto, Decisão, Alternativas, 
 | # | Título | Status |
 |---|---|---|
 | [0001](0001-workbench-como-host-de-agente.md) | Workbench como host de agente, construído sobre o Pi | accepted |
-| [0002](0002-projeto-acima-dos-repos.md) | Projeto como nível acima dos repositórios | proposed |
+| [0002](0002-projeto-acima-dos-repos.md) | Projeto como nível acima dos repositórios | accepted |
