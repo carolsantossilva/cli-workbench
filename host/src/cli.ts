@@ -5,7 +5,7 @@ import path from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
 import { detectCommands } from "./detect.ts";
 import { runWorkflow } from "./fluxo.ts";
-import { type ApprovalAnswer, type ApprovalRequest, DEFAULT_MODEL, type Decision, defaultAuditDir, describeScope, type RunResult, runTask } from "./host.ts";
+import { type ApprovalAnswer, type ApprovalRequest, DEFAULT_MODEL, DEFAULT_THINKING, THINKING_LEVELS, type Decision, defaultAuditDir, describeScope, type RunResult, runTask } from "./host.ts";
 import { loadProjectConfig, PROFILE_NAMES, type ProfileName, resolveScope } from "./profiles.ts";
 import { findDeniedFiles, sandboxAvailable } from "./sandbox.ts";
 import { approvalStatus, approve, loadState, preflight, WORKFLOW_IDS, type WorkflowId, WORKFLOWS } from "./workflows.ts";
@@ -24,6 +24,7 @@ Etapas: ${WORKFLOW_IDS.join(" → ")}
 
 Opções:
   --modelo provider/modelo   padrão ${DEFAULT_MODEL} (login: npx pi auth login openai-codex)
+  --raciocinio <nível>       ${THINKING_LEVELS.join("|")} (padrão ${DEFAULT_THINKING})
   --sem-perguntas            não pergunta nada: fora do escopo é negado e o agente decide com premissas
 
 Perfil padrão do run: o de .workbench.json do projeto, senão "leitura".
@@ -35,13 +36,15 @@ function parse(argv: string[]) {
 	let semPerguntas = false;
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
-		if (a === "--perfil" || a === "--modelo") flags[a.slice(2)] = argv[++i] ?? "";
+		if (a === "--perfil" || a === "--modelo" || a === "--raciocinio") flags[a.slice(2)] = argv[++i] ?? "";
 		else if (a === "--sem-perguntas") semPerguntas = true;
 		else rest.push(a);
 	}
 	const perfil = flags.perfil as ProfileName | undefined;
 	if (perfil && !PROFILE_NAMES.includes(perfil)) throw new Error(`perfil desconhecido "${perfil}" (use ${PROFILE_NAMES.join(", ")})`);
-	return { perfil, modelo: flags.modelo, semPerguntas, rest };
+	const raciocinio = flags.raciocinio as (typeof THINKING_LEVELS)[number] | undefined;
+	if (raciocinio && !THINKING_LEVELS.includes(raciocinio)) throw new Error(`nível de raciocínio desconhecido "${raciocinio}" (use ${THINKING_LEVELS.join(", ")})`);
+	return { perfil, modelo: flags.modelo, raciocinio, semPerguntas, rest };
 }
 
 const dim = (s: string) => (process.stderr.isTTY ? `\x1b[2m${s}\x1b[0m` : s);
@@ -106,7 +109,7 @@ function status(root: string) {
 async function main() {
 	const [cmd, ...argv] = process.argv.slice(2);
 	if (!cmd || cmd === "-h" || cmd === "--help") return console.log(USAGE);
-	const { perfil, modelo, semPerguntas, rest } = parse(argv);
+	const { perfil, modelo, raciocinio, semPerguntas, rest } = parse(argv);
 	const [projeto, ...args] = rest;
 	if (!projeto) throw new Error(USAGE);
 	const root = realpathSync(projeto);
@@ -133,7 +136,7 @@ async function main() {
 			const interactive = !semPerguntas && process.stdin.isTTY && process.stderr.isTTY;
 			const rl = interactive ? createInterface({ input: process.stdin, output: process.stderr }) : undefined;
 			const { ask, askUser } = prompts(rl);
-			const common = { projectDir: root, model: modelo, ask, askUser, onText: (t: string) => process.stdout.write(t), onDecision };
+			const common = { projectDir: root, model: modelo, thinkingLevel: raciocinio, ask, askUser, onText: (t: string) => process.stdout.write(t), onDecision };
 			try {
 				if (cmd === "run") {
 					if (args.length === 0) throw new Error("falta a tarefa");

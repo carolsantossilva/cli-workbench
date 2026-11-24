@@ -16,7 +16,7 @@ node src/cli.ts escopo ~/meu-projeto --perfil codigo
 node src/cli.ts run ~/meu-projeto --perfil docs "resuma a arquitetura em docs/arquitetura.md"
 ```
 
-O modelo padrão é `openai-codex/gpt-6-luna`. Para trocar, use `--modelo provider/modelo`.
+O modelo padrão é `openai-codex/gpt-6-luna`, com raciocínio `xhigh`. Para trocar, use `--modelo provider/modelo` e `--raciocinio off|minimal|low|medium|high|xhigh|max`. O Pi ajusta o nível ao que o modelo suporta, e o nível efetivo fica na auditoria (evento `thinking`).
 
 ### Aprovação interativa
 

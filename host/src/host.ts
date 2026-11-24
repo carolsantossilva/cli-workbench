@@ -46,6 +46,8 @@ export interface RunOptions {
 	profile?: ProfileName;
 	/** "provider/modelo", ex.: openai-codex/gpt-6-luna */
 	model?: string;
+	/** Esforço de raciocínio (padrão xhigh); o Pi ajusta ao que o modelo suporta. */
+	thinkingLevel?: ThinkingLevel;
 	/** Para testes: runtime e modelo já prontos (ex.: provider faux). */
 	modelRuntime?: ModelRuntime;
 	modelOverride?: Model<Api>;
@@ -74,6 +76,10 @@ export interface RunResult {
 }
 
 export const DEFAULT_MODEL = "openai-codex/gpt-6-luna";
+// Mesmo conjunto do ThinkingLevel do Pi (pi-agent-core não é dependência direta).
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export const DEFAULT_THINKING: ThinkingLevel = "xhigh";
+export const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 const REFUSAL = /^\s*(n[ãa]o posso ajudar|n[ãa]o posso atender|I can(?:no|')t assist|I can(?:no|')t help|I'm sorry, but I can(?:no|')t)/i;
 export function looksLikeRefusal(text: string): boolean {
@@ -302,6 +308,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		cwd: root,
 		agentDir,
 		model,
+		thinkingLevel: opts.thinkingLevel ?? DEFAULT_THINKING,
 		modelRuntime,
 		resourceLoader,
 		settingsManager,
@@ -310,6 +317,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		sessionManager: SessionManager.inMemory(root),
 	});
 	await session.bindExtensions?.({});
+	audit("thinking", { requested: opts.thinkingLevel ?? DEFAULT_THINKING, effective: session.thinkingLevel });
 	const unsubscribe = session.subscribe((event) => {
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") opts.onText?.(event.assistantMessageEvent.delta);
 	});
