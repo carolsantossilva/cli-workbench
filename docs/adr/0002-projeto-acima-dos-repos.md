@@ -70,7 +70,7 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
   - quem publica é o host, não o agente, e com confirmação do usuário;
   - o agente escreve um rascunho local, e o host publica;
   - na leitura, o corpo e os comentários de uma issue são entrada não confiável, porque outras pessoas podem comentar;
-  - um mesmo fluxo não deve juntar dados privados, essa entrada e o envio para fora (a "lethal trifecta" do ADR 0001).
+  - um mesmo fluxo não deve juntar dados privados, essa entrada e o envio para fora. Com os três juntos, um texto injetado na issue pode fazer o agente vazar dados (a "lethal trifecta", [Simon Willison, 2025](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/)).
 - **Aprovação do design:**
   - num repo, continua sendo o sha256 do arquivo;
   - numa issue, é o sha256 do texto aprovado, guardado em `.workbench/state.json` junto com a referência da issue (e do comentário, se o design for um).
