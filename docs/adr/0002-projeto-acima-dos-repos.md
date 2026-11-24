@@ -47,6 +47,7 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
    - O destino é escolhido por run (ex.: `--spec repo:<nome>` ou `--spec issue:<dono>/<repo>#<n>`). Um padrão pode ficar no `.workbench.json`.
    - Projetos que já têm `docs/workbench/` dentro de um repo continuam funcionando sem migração: é o destino "repo".
    - Issues são só do GitHub, via `gh`, usando o login que o `gh` já tem.
+   - Não há regra de quantas issues por ideia. Com `--spec issue:<dono>/<repo>#<n>`, a saída da etapa vira um comentário naquela issue. Com `--spec issue:<dono>/<repo>` (sem número), o `wb` abre uma issue nova. Assim dá para juntar as etapas numa issue só ou separar em várias, conforme o caso.
    - O agente só lê o corpo e os comentários escritos por quem tem permissão `admin` no repo da issue. O host confere isso pela API de permissões do GitHub (`/repos/{dono}/{repo}/collaborators/{usuário}/permission`), não pelo `author_association` do comentário, que não distingue admin de outros colaboradores. Como quem tem escrita no repo pode editar textos de outras pessoas, o host também confere quem fez a última edição (campo `editor` da API GraphQL); texto editado por quem não é admin fica de fora. "Nunca editado" se confere por `lastEditedAt` vazio, não por `editor` nulo: `lastEditedAt` preenchido com `editor` nulo (conta apagada) também fica de fora. Autor, editor e conteúdo vêm da mesma consulta. Se a permissão não puder ser conferida (falta de acesso do `gh`, bot, GitHub App, conta apagada), o texto fica de fora. O resto da issue não chega ao modelo.
 
 5. **Cada etapa roda no seu nível.**
@@ -86,5 +87,4 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 
 - O formato exato de `repos`: só globs, ou também nomes (`{"workbench": ".worktree/workbench/*"}`) para o `--repo` aceitar um nome curto.
 - Um `build` que precise mexer em dois repos ao mesmo tempo: um run por repo, ou um sandbox com vários repos.
-- **Como as etapas viram issue:** uma issue por etapa, ou uma issue por ideia com um comentário por etapa.
 - Quem escolhe o destino quando não há padrão: o `wb` pergunta no primeiro `brainstorm`, ou exige `--spec`.
