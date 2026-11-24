@@ -3,7 +3,7 @@
 - **Status:** proposed
 - **Escrito em:** 2026-11-24
 - **Escopo:** o que o `wb` entende por "projeto", onde ficam as especificações, onde cada etapa roda e onde ficam estado e auditoria.
-- **Decidido em 2026-11-24:** só os itens 4 (as especificações ficam num repo ou numa issue, conforme o contexto) e 6 (o `wb` cria as worktrees) da Decisão. O resto continua proposto.
+- **Decidido em 2026-11-24:** só os itens 4 (as especificações ficam num repo ou numa issue, conforme o contexto, com issues só do GitHub e só comentários de admins) e 6 (o `wb` cria as worktrees) da Decisão. O resto continua proposto.
 - **Implementação:** parcial. A auditoria já foi para `<projeto>/.workbench/runs/` (PR #5). Hoje "projeto" ainda é um único diretório, na prática um repo. O resto deste ADR não foi implementado.
 
 ## Contexto
@@ -46,6 +46,8 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
    - **Numa issue:** cada etapa vira o corpo da issue ou um comentário nela. Serve para discussões, decisões que envolvem vários repos, ou ideias que ainda não têm repo.
    - O destino é escolhido por run (ex.: `--spec repo:<nome>` ou `--spec issue:<repo>#<n>`). Um padrão pode ficar no `.workbench.json`.
    - Projetos que já têm `docs/workbench/` dentro de um repo continuam funcionando sem migração: é o destino "repo".
+   - Issues são só do GitHub, via `gh`, usando o login que o `gh` já tem.
+   - O agente só lê o corpo e os comentários escritos por quem tem permissão `admin` no repo da issue. O host confere isso pela API de permissões do GitHub (`/repos/{dono}/{repo}/collaborators/{usuário}/permission`), não pelo `author_association` do comentário, que não distingue admin de outros colaboradores. O resto da issue não chega ao modelo.
 
 5. **Cada etapa roda no seu nível.**
    - `brainstorm`, `grill-me` e `design` leem o projeto inteiro, incluindo os repos, e escrevem só no destino da especificação.
@@ -69,7 +71,7 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 - **Issues são um canal externo.** Publicar uma etapa numa issue envia conteúdo para fora da máquina, então:
   - quem publica é o host, não o agente, e com confirmação do usuário;
   - o agente escreve um rascunho local, e o host publica;
-  - na leitura, o corpo e os comentários de uma issue são entrada não confiável, porque outras pessoas podem comentar;
+  - na leitura, só entra texto de admins do repo (item 4). Mesmo assim, ele continua sendo tratado como entrada externa: uma conta de admin pode estar comprometida, e um texto colado de outro lugar pode trazer instruções;
   - um mesmo fluxo não deve juntar dados privados, essa entrada e o envio para fora. Com os três juntos, um texto injetado na issue pode fazer o agente vazar dados (a "lethal trifecta", [Simon Willison, 2025](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/)).
 - **Aprovação do design:**
   - num repo, continua sendo o sha256 do arquivo;
@@ -84,8 +86,5 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 
 - O formato exato de `repos`: só globs, ou também nomes (`{"workbench": ".worktree/workbench/*"}`) para o `--repo` aceitar um nome curto.
 - Um `build` que precise mexer em dois repos ao mesmo tempo: um run por repo, ou um sandbox com vários repos.
-- **Issues:**
-  - qual provedor: só GitHub (via `gh`) na V1?
-  - como etapas viram issue: uma issue por etapa, ou uma issue com um comentário por etapa?
-  - quais comentários o agente lê: só os do dono do projeto, ou todos, marcados como não confiáveis?
+- **Como as etapas viram issue:** uma issue por etapa, ou uma issue por ideia com um comentário por etapa.
 - Quem escolhe o destino quando não há padrão: o `wb` pergunta no primeiro `brainstorm`, ou exige `--spec`.
