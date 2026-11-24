@@ -14,6 +14,8 @@ export interface DetectedCommand {
 const NPM_SCRIPTS = ["test", "lint", "typecheck", "check", "build"];
 const MAX_DEPTH = 2;
 const SKIP = new Set(["node_modules", "vendor", "dist", "build", "target", "coverage"]);
+// Nomes que entram no comando sugerido e no system prompt: só os seguros para o shell, sem aspas.
+const SAFE_NAME = /^[A-Za-z0-9._-]+$/;
 
 function commandsIn(dir: string, rel: string): DetectedCommand[] {
 	const out: DetectedCommand[] = [];
@@ -49,7 +51,7 @@ export function detectCommands(root: string): DetectedCommand[] {
 			return;
 		}
 		// Só pastas de verdade (symlinks não), em ordem estável.
-		for (const e of entries.filter((e) => e.isDirectory() && !e.name.startsWith(".") && !SKIP.has(e.name)).sort((a, b) => a.name.localeCompare(b.name))) {
+		for (const e of entries.filter((e) => e.isDirectory() && !e.name.startsWith(".") && !SKIP.has(e.name) && SAFE_NAME.test(e.name)).sort((a, b) => a.name.localeCompare(b.name))) {
 			walk(path.join(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
 		}
 	};
