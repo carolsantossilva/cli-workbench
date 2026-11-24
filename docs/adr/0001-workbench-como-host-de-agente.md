@@ -2,8 +2,8 @@
 
 - **Status:** accepted
 - **Escrito em:** 2026-10-18; revisado em 2026-11-24, antes do aceite, para refletir as decisões tomadas durante o micro MVP.
-- **Direção escolhida em:** 2026-10-18, no grill-me de `docs/workbench/pi-host/` (decisão D1), pelo desenvolvedor do projeto. Ajustada em 2026-11-23 (host autônomo em TypeScript, sem o núcleo Go no caminho).
-- **Aceito em:** 2026-11-24, pelo desenvolvedor do projeto.
+- **Direção escolhida em:** 2026-10-18, no grill-me de `docs/workbench/pi-host/` (decisão D1), por carolsantossilva. Ajustada em 2026-11-23 (host autônomo em TypeScript, sem o núcleo Go no caminho).
+- **Aceito em:** 2026-11-24, por carolsantossilva.
 - **Escopo:** papel da Workbench na V1 e suas fronteiras com o agente e com o provedor de modelos.
 - **Implementação:** micro MVP em [`host/`](../../host/README.md) (PR #5). O spike de 2026-10-18 continua em [`spikes/pi-host`](../../spikes/pi-host/) como registro.
 
@@ -11,7 +11,7 @@
 
 O `design.md` define a Workbench como uma CLI que orienta um agente externo. Ela é "Codex-first", não chama modelos (§8), e "o agente existente continua responsável por raciocinar, chamar ferramentas e executar as mudanças" (§1). A implementação em Go segue isso: `workflow run` prepara o contexto, `workflow verify` confere o resultado e, entre os dois, o host faz o que quiser. O próprio README admite as consequências: "host tools are not sandboxed or intercepted by the CLI", e a verificação posterior é best-effort.
 
-Essa regra refletia só a forma de trabalhar do desenvolvedor na época, não um requisito do produto. Ao mesmo tempo, o `design.md` §7 exige coisas que só quem controla o loop do agente consegue garantir:
+Essa regra vinha do fluxo de trabalho da época, com o Codex como agente, e não de um requisito do produto. Ao mesmo tempo, o `design.md` §7 exige coisas que só quem controla o loop do agente consegue garantir:
 - registro local do que foi enviado a um provedor;
 - lista de provedores permitidos;
 - detecção e mascaramento de segredos antes do envio;
@@ -45,7 +45,7 @@ O núcleo Go **não** faz parte do caminho principal. Ele fica no repositório c
 ## Alternativas consideradas
 
 - **Manter Codex-first, com o host Pi como segundo caminho.** Preservaria o `design.md` atual, mas as garantias da §7 continuariam opcionais e o caminho principal continuaria sem elas. Rejeitada no grill-me.
-- **Host Pi consumindo o núcleo Go** (`workflow run`/`verify` como contrato e escopo compilado pelo Go). Era a primeira versão deste ADR. Rejeitada em 2026-11-23: manteria dois runtimes e um `workspace.json` escrito à mão, sem ganho para o uso real. O desenvolvedor escolheu o Go só por desempenho, o que não pesa num processo que espera o modelo.
+- **Host Pi consumindo o núcleo Go** (`workflow run`/`verify` como contrato e escopo compilado pelo Go). Era a primeira versão deste ADR. Rejeitada em 2026-11-23: manteria dois runtimes e um `workspace.json` escrito à mão, sem ganho para o uso real. O Go tinha sido escolhido só por desempenho, o que não pesa num processo que passa a maior parte do tempo esperando o modelo.
 - **Extensão avulsa do Pi, fora do produto.** É a opção mais barata, mas não muda as garantias da Workbench. Rejeitada no grill-me.
 - **Hooks de outros hosts (Codex, Claude Code).** A cobertura varia por host, e nenhum deles dá controle do payload enviado ao provedor. Isso continua como possível modo degradado (ver "Em aberto").
 - **Escrever um harness próprio do zero.** Daria controle total, mas exigiria reimplementar loop, sessões, compactação, TUI e provedores. O Pi entrega isso com licença MIT e com a possibilidade de fork.
