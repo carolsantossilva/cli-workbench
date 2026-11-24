@@ -595,3 +595,20 @@ test("symlinks dentro de .workbench (vindos do repositório) não são seguidos"
 	assert.deepEqual(readdirSync(outside).sort(), ["state-alvo.json"], "nada foi criado fora do projeto");
 	assert.equal(readFileSync(path.join(outside, "state-alvo.json"), "utf8"), "original\n");
 });
+
+test("criação de .workbench tolera outro wb criando ao mesmo tempo; marcador e auditoria não seguem symlink", async () => {
+	const { workbenchDir, auditDirFor, appendInside, writeInside } = await import("../src/workdir.ts");
+	const root = makeProject("wb-corrida");
+	// Simula a corrida: a pasta e o .gitignore já existem quando o segundo wb chega.
+	workbenchDir(root);
+	assert.doesNotThrow(() => workbenchDir(root));
+	assert.doesNotThrow(() => auditDirFor(root));
+
+	const outside = path.join(tmp, "alvo-append");
+	writeFileSync(outside, "original\n");
+	symlinkSync(outside, path.join(root, ".workbench/runs/x.jsonl"));
+	symlinkSync(outside, path.join(root, ".workbench/run-x.json"));
+	assert.throws(() => appendInside(path.join(root, ".workbench/runs/x.jsonl"), "{}\n"), /é um symlink/);
+	assert.throws(() => writeInside(path.join(root, ".workbench/run-x.json"), "{}\n"), /é um symlink/);
+	assert.equal(readFileSync(outside, "utf8"), "original\n");
+});

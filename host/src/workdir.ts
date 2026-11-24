@@ -11,11 +11,19 @@ const IGNORE = "# Criado pelo wb: estado e auditoria locais, fora do git.\n*\n";
 
 const symlinkError = (p: string) => new Error(`${p} é um symlink ou não é do tipo esperado; remova-o para continuar`);
 
+const isEexist = (err: unknown) => (err as NodeJS.ErrnoException).code === "EEXIST";
+
 /** Cria a pasta se preciso; recusa se ela já existe como outra coisa (symlink incluído). */
 function realDir(dir: string): string {
-	const st = lstatSync(dir, { throwIfNoEntry: false });
-	if (st && !st.isDirectory()) throw symlinkError(dir);
-	if (!st) mkdirSync(dir);
+	if (!lstatSync(dir, { throwIfNoEntry: false })) {
+		try {
+			mkdirSync(dir);
+		} catch (err) {
+			// Outro wb no mesmo projeto pode ter criado a pasta entre o lstat e o mkdir.
+			if (!isEexist(err)) throw err;
+		}
+	}
+	if (!lstatSync(dir).isDirectory()) throw symlinkError(dir);
 	return dir;
 }
 
@@ -44,8 +52,14 @@ export function workbenchDir(root: string): string {
 	const dir = realDir(path.join(root, ".workbench"));
 	const ignore = path.join(dir, ".gitignore");
 	const st = lstatSync(ignore, { throwIfNoEntry: false });
-	if (!st) writeNoFollow(ignore, IGNORE, constants.O_EXCL);
-	else if (!st.isFile()) throw symlinkError(ignore);
+	if (!st) {
+		try {
+			writeNoFollow(ignore, IGNORE, constants.O_EXCL);
+		} catch (err) {
+			if (!isEexist(err)) throw err;
+		}
+	}
+	if (!lstatSync(ignore).isFile()) throw symlinkError(ignore);
 	return dir;
 }
 
