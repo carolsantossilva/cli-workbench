@@ -1,5 +1,5 @@
 // Checagens puras de caminho e redação de segredos (base: spikes/pi-host/policy.ts).
-import { existsSync, realpathSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 import path from "node:path";
 import type { EffectiveScope } from "./profiles.ts";
 
@@ -14,13 +14,29 @@ export function resolveInRoot(root: string, input: string): Decision {
 	const p = input.startsWith("@") ? input.slice(1) : input;
 	if (p.startsWith("~")) return { allow: false, hard: true, reason: `caminho na home não é permitido: ${input}` };
 	const abs = path.resolve(realRoot, p);
+	// lstat (não existsSync): um symlink quebrado "existe" e precisa ser resolvido, senão
+	// uma escrita seguiria o link para fora da raiz ou para .workbench/.git.
+	const present = (p: string) => {
+		try {
+			lstatSync(p);
+			return true;
+		} catch {
+			return false;
+		}
+	};
 	let probe = abs;
 	const tail: string[] = [];
-	while (!existsSync(probe) && probe !== path.dirname(probe)) {
+	while (!present(probe) && probe !== path.dirname(probe)) {
 		tail.unshift(path.basename(probe));
 		probe = path.dirname(probe);
 	}
-	const real = path.join(realpathSync(probe), ...tail);
+	let resolved: string;
+	try {
+		resolved = realpathSync(probe);
+	} catch {
+		return { allow: false, hard: true, reason: `symlink quebrado não é permitido: ${input}` };
+	}
+	const real = path.join(resolved, ...tail);
 	const rel = path.relative(realRoot, real);
 	if (rel.startsWith("..") || path.isAbsolute(rel)) return { allow: false, hard: true, reason: `fora da raiz do projeto: ${input}` };
 	return { allow: true, rel: rel.split(path.sep).join("/") || "." };

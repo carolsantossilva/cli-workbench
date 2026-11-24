@@ -401,3 +401,34 @@ test("sandbox: credenciais dentro das toolchains da home ficam mascaradas", { sk
 		process.env.HOME = oldHome;
 	}
 });
+
+test("symlink quebrado não leva escrita para fora da raiz nem para .workbench", async () => {
+	const root = makeProject("symlink-quebrado");
+	const outside = path.join(tmp, "fora-ainda-nao-existe.txt");
+	symlinkSync(outside, path.join(root, "notas.md"));
+	symlinkSync(".workbench/estado.json", path.join(root, "aprova.md"));
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage(
+			[
+				fauxToolCall("write", { path: "notas.md", content: "fuga\n" }),
+				fauxToolCall("write", { path: "aprova.md", content: "{}\n" }),
+			],
+			{ stopReason: "toolUse" },
+		),
+		fauxAssistantMessage([fauxText("ok")]),
+	]);
+	const r = await runTask({ projectDir: root, task: "x", profile: "docs", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	assert.ok(!existsSync(outside), "nada escrito fora da raiz");
+	assert.ok(!existsSync(path.join(root, ".workbench/estado.json")), "aprovação não forjada");
+	assert.ok(r.decisions.filter((d) => !d.allowed).length >= 2);
+});
+
+test("guarda: não limpa a foto de um run que ainda está vivo", () => {
+	const root = makeProject("vivo");
+	mkdirSync(path.join(root, ".workbench"), { recursive: true });
+	const alivePid = process.ppid;
+	writeFileSync(path.join(root, ".workbench/execucao-ativa.json"), JSON.stringify({ runId: "vivo", pid: alivePid, configExisted: false, gits: [".git"] }));
+	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"docs"}\n');
+	assert.equal(loadProjectConfig(root).perfil, "docs");
+	assert.ok(existsSync(path.join(root, ".workbench/execucao-ativa.json")), "a foto do run vivo continua lá");
+});

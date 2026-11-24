@@ -11,6 +11,7 @@ const CONFIG = ".workbench.json";
 
 interface Snapshot {
 	runId: string;
+	pid: number;
 	configExisted: boolean;
 	gits: string[];
 }
@@ -42,7 +43,7 @@ export function findGitEntries(root: string, maxDepth = 12): string[] {
 }
 
 export function beginGuard(root: string, runId: string): Snapshot {
-	const snap: Snapshot = { runId, configExisted: existsSync(path.join(root, CONFIG)), gits: findGitEntries(root) };
+	const snap: Snapshot = { runId, pid: process.pid, configExisted: existsSync(path.join(root, CONFIG)), gits: findGitEntries(root) };
 	mkdirSync(path.join(root, ".workbench"), { recursive: true });
 	writeFileSync(path.join(root, MARKER), JSON.stringify(snap) + "\n");
 	return snap;
@@ -63,7 +64,20 @@ export function endGuard(root: string, snap: Snapshot): Quarantined[] {
 	return moved;
 }
 
-/** Se um run anterior foi interrompido, faz agora a limpeza que ficou pendente. */
+function alive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (err) {
+		return (err as NodeJS.ErrnoException).code === "EPERM";
+	}
+}
+
+/**
+ * Se um run anterior morreu sem limpar (kill -9, queda), faz agora a limpeza pendente.
+ * Um run ainda vivo (outro terminal) não é tocado. O que for movido é avisado, e dá
+ * para desfazer renomeando de volta, caso tenha sido criado por você depois da queda.
+ */
 export function recoverInterrupted(root: string): Quarantined[] {
 	const marker = path.join(root, MARKER);
 	if (!existsSync(marker)) return [];
@@ -74,5 +88,10 @@ export function recoverInterrupted(root: string): Quarantined[] {
 		rmSync(marker, { force: true });
 		return [];
 	}
-	return endGuard(root, snap);
+	if (snap.pid && snap.pid !== process.pid && alive(snap.pid)) return [];
+	const moved = endGuard(root, snap);
+	for (const q of moved) {
+		process.stderr.write(`[workbench] o run ${snap.runId} foi interrompido; ${q.path} apareceu depois do início dele e foi movido para ${q.movedTo}. Se foi você que criou, renomeie de volta.\n`);
+	}
+	return moved;
 }
