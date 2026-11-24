@@ -23,7 +23,7 @@ function project(name: string): string {
 	return root;
 }
 
-test("despacha status, scope e step approve", () => {
+test("despacha status, scope e step approve (que recusa sem terminal)", () => {
 	const root = project("ok");
 	const status = wb("status", "-C", root);
 	assert.equal(status.code, 0, status.err);
@@ -36,7 +36,25 @@ test("despacha status, scope e step approve", () => {
 	mkdirSync(path.join(root, "docs/workbench"), { recursive: true });
 	writeFileSync(path.join(root, "docs/workbench/design.md"), "# Design\n");
 	const approve = wb("step", "approve", "design", "-C", root);
-	assert.equal(approve.code, 0, approve.err);
+	assert.equal(approve.code, 1, "sem terminal, não aprova");
+	assert.match(approve.err, /só roda num terminal interativo/);
+	assert.equal(approvalStatus(root, "design"), "pending");
+});
+
+// Num terminal (simulado com o `script` do util-linux), só aprova com "aprovar" digitado.
+test("step approve num terminal: aprova só com \"aprovar\"", { skip: spawnSync("script", ["--version"]).status !== 0 && "script ausente" }, () => {
+	const root = project("tty");
+	mkdirSync(path.join(root, "docs/workbench"), { recursive: true });
+	writeFileSync(path.join(root, "docs/workbench/design.md"), "# Design\n");
+	const inTty = (typed: string) =>
+		spawnSync("script", ["-qec", `${process.execPath} ${CLI} step approve design -C ${root}`, "/dev/null"], { input: typed, encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
+
+	const no = inTty("sim\n");
+	assert.match(no.stdout, /não aprovado/);
+	assert.equal(approvalStatus(root, "design"), "pending");
+
+	const yes = inTty("aprovar\n");
+	assert.match(yes.stdout, /aprovado \(sha256/);
 	assert.equal(approvalStatus(root, "design"), "approved");
 });
 

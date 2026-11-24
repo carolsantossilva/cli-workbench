@@ -30,7 +30,7 @@ const HELP: Record<string, string> = {
 Comandos:
   run <tarefa...>              roda uma tarefa no projeto, dentro de um sandbox
   step run <etapa> [texto...]  roda uma etapa do fluxo: ${STEP_IDS.join(" → ")}
-  step approve <etapa>         aprova a saída de uma etapa (hoje: design) pelo sha256
+  step approve <etapa>         aprova a saída de uma etapa (hoje: design) pelo sha256; só no terminal, digitando "aprovar"
   status                       mostra em que etapa o projeto está e o próximo passo
   scope                        mostra o que o agente pode ler, escrever e rodar
   help [comando]               ajuda de um comando
@@ -203,9 +203,27 @@ async function stepCommand(root: string, args: Args, rest: string[]) {
 	throw new Error(`subcomando desconhecido "step ${sub ?? ""}" (use step run ou step approve)\n\n${HELP.step}`);
 }
 
-function stepApprove(root: string, args: Args, rest: string[]) {
+/**
+ * A aprovação é da pessoa, não do agente: só vale num terminal interativo, com a palavra
+ * "aprovar" digitada. É uma trava contra aprovação por engano (um agente rodando o wb não
+ * tem terminal), não contra um agente decidido a contorná-la, que poderia simular um com
+ * `script`. A garantia de verdade vem da aprovação por PR (ADR 0003).
+ */
+async function stepApprove(root: string, args: Args, rest: string[]) {
 	checkUsage("step approve", args, rest, { flags: [], min: 1 });
-	const a = approve(root, asStep(rest[0]));
+	const id = asStep(rest[0]);
+	if (!process.stdin.isTTY || !process.stderr.isTTY) {
+		throw new Error(`"wb step approve" só roda num terminal interativo: a aprovação é sua, não do agente. Rode no seu terminal: wb step approve ${id}`);
+	}
+	const rl = createInterface({ input: process.stdin, output: process.stderr });
+	let answer: string;
+	try {
+		answer = (await rl.question(`Revisou ${STEPS[id].output}? Digite "aprovar" para aprovar: `)).trim().toLowerCase();
+	} finally {
+		rl.close();
+	}
+	if (answer !== "aprovar") throw new Error("não aprovado");
+	const a = approve(root, id);
 	console.log(`${a.file} aprovado (sha256 ${a.sha256.slice(0, 12)}…). Se o arquivo mudar, a aprovação deixa de valer.`);
 }
 

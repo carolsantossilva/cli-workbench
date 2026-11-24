@@ -45,7 +45,7 @@ Quando o agente tenta ler ou escrever um arquivo fora do sandbox, a Workbench pe
 wb step run brainstorm "uma CLI para guardar tarefas em JSON"
 wb step run grill-me
 wb step run design
-wb step approve design      # depois de revisar o design
+wb step approve design      # depois de revisar o design; no seu terminal, digitando "aprovar"
 wb step run build
 wb step run review
 wb status                   # onde está cada etapa e qual é o próximo passo
@@ -62,7 +62,7 @@ wb status                   # onde está cada etapa e qual é o próximo passo
 Todos os arquivos ficam em `docs/workbench/`. Cada etapa roda numa sessão nova, então o contexto passa de uma etapa para a outra só pelos arquivos.
 
 - **Entradas:** uma etapa não roda sem as entradas obrigatórias, e o erro diz qual etapa rodar antes.
-- **Aprovação do design:** o `build` só roda com o design aprovado. `wb step approve` grava o sha256 do `design.md` em `.workbench/state.json`. A pasta `.workbench/` tem um `.gitignore` próprio com `*`, então fica fora do git sem mexer no `.gitignore` do projeto. Se o design mudar depois, a aprovação deixa de valer e o build volta a ser barrado.
+- **Aprovação do design:** o `build` só roda com o design aprovado. `wb step approve` grava o sha256 do `design.md` em `.workbench/state.json`. A pasta `.workbench/` tem um `.gitignore` próprio com `*`, então fica fora do git sem mexer no `.gitignore` do projeto. Se o design mudar depois, a aprovação deixa de valer e o build volta a ser barrado. A aprovação só roda num terminal interativo, com a palavra "aprovar" digitada: um agente rodando o `wb` não tem terminal e não consegue aprovar por engano. Isso não impede um agente decidido a simular um terminal; a aprovação que ele não consegue forjar vem com o [ADR 0003](../docs/adr/0003-aprovacao-por-pr-com-bot.md).
 - **Pedido extra:** nas etapas depois do brainstorm, o texto passado vira um pedido extra (ex.: `wb step run build "só o lote 2"`).
 - **Perguntas:** no `brainstorm` e no `grill-me`, o agente usa a ferramenta `ask_user`. Com `--no-input`, ou sem terminal, ele decide com premissas explícitas.
 
