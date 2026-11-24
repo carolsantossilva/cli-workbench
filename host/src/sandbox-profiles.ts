@@ -1,12 +1,11 @@
-// Sandboxes (perfis de permissão): cada execução escolhe um, e o projeto só declara exceções.
+// Os sandboxes prontos (perfis de permissão): cada execução escolhe um, e o projeto só
+// declara exceções no .workbench.json (project-config.ts). O sandbox.ts aplica isso no bwrap.
 // Nomes seguem o --sandbox do Codex CLI onde há equivalente (read-only, workspace-write).
-import { existsSync, readFileSync } from "node:fs";
-import { recoverInterrupted } from "./guard.ts";
-import path from "node:path";
+import type { ProjectConfig } from "./project-config.ts";
 
 export type SandboxName = "read-only" | "docs-only" | "workspace-write";
 
-export interface Profile {
+export interface SandboxProfile {
 	/** Um sandbox pronto ou "step <etapa>". */
 	name: string;
 	description: string;
@@ -35,7 +34,7 @@ export const ALWAYS_DENY = [
 // Podem ser lidos, nunca escritos pelo agente.
 export const WRITE_DENY = ["**/.git/**", ".git", "**/.workbench/**", ".workbench.json"];
 
-const BUILTIN: Record<SandboxName, Profile> = {
+const BUILTIN: Record<SandboxName, SandboxProfile> = {
 	"read-only": {
 		name: "read-only",
 		description: "Lê o projeto e responde. Não escreve nada e não roda comandos.",
@@ -62,31 +61,8 @@ const BUILTIN: Record<SandboxName, Profile> = {
 
 export const SANDBOX_NAMES = Object.keys(BUILTIN) as SandboxName[];
 
-/** `.workbench.json` opcional na raiz do projeto: só exceções aos sandboxes. */
-export interface ProjectConfig {
-	/** Sandbox padrão do `wb run` neste projeto. */
-	sandbox?: SandboxName;
-	/** Globs negados além dos sempre negados. */
-	deny?: string[];
-	/** Globs graváveis a mais, por sandbox. */
-	write?: Partial<Record<SandboxName, string[]>>;
-}
-
-export function loadProjectConfig(root: string): ProjectConfig {
-	recoverInterrupted(root);
-	const file = path.join(root, ".workbench.json");
-	if (!existsSync(file)) return {};
-	const cfg = JSON.parse(readFileSync(file, "utf8")) as ProjectConfig;
-	const legacy = ["perfil", "negar", "perfis"].filter((k) => k in cfg);
-	if (legacy.length > 0) throw new Error(`.workbench.json: chaves antigas ${legacy.join(", ")}; use sandbox, deny e write`);
-	if (cfg.sandbox && !SANDBOX_NAMES.includes(cfg.sandbox)) {
-		throw new Error(`.workbench.json: sandbox desconhecido "${cfg.sandbox}" (use ${SANDBOX_NAMES.join(", ")})`);
-	}
-	return cfg;
-}
-
 export interface EffectiveScope {
-	profile: Profile;
+	profile: SandboxProfile;
 	read: string[];
 	write: string[];
 	deny: string[];

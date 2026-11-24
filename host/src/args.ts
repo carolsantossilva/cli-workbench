@@ -1,7 +1,7 @@
 // Parser de argumentos do wb: flags em qualquer posição (clig.dev), "--flag=valor" ou
 // "--flag valor", e "--" encerra as opções (POSIX).
 import { THINKING_LEVELS, type ThinkingLevel } from "./host.ts";
-import { SANDBOX_NAMES, type SandboxName } from "./profiles.ts";
+import { SANDBOX_NAMES, type SandboxName } from "./sandbox-profiles.ts";
 
 export interface Args {
 	project: string;

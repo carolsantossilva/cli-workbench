@@ -1,7 +1,7 @@
 // Checagens puras de caminho e redação de segredos (base: spikes/pi-host/policy.ts).
 import { lstatSync, realpathSync } from "node:fs";
 import path from "node:path";
-import type { EffectiveScope } from "./profiles.ts";
+import type { EffectiveScope } from "./sandbox-profiles.ts";
 
 // hard: nunca pode ser liberado (sensível, fora da raiz, config/.git).
 // soft: só o perfil não cobre; pode virar pergunta ao usuário.

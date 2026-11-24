@@ -4,7 +4,7 @@ import { closeSync, constants, existsSync, mkdirSync, openSync, realpathSync, wr
 import path from "node:path";
 import { type RunOptions, type RunResult, runTask } from "./host.ts";
 import { resolveInRoot } from "./policy.ts";
-import { loadProjectConfig } from "./profiles.ts";
+import { loadProjectConfig } from "./project-config.ts";
 import {
 	type ApprovalStatus,
 	approvalStatus,

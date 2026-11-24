@@ -2,7 +2,7 @@
 // ao usuário. Toda decisão é registrada na auditoria e devolvida ao Pi.
 import type { Audit } from "./usage.ts";
 import { checkPath } from "./policy.ts";
-import type { EffectiveScope } from "./profiles.ts";
+import type { EffectiveScope } from "./sandbox-profiles.ts";
 
 export interface Decision {
 	tool: string;

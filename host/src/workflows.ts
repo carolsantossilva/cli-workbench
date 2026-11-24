@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { workbenchDir, writeInside } from "./workdir.ts";
-import { ALWAYS_DENY, type EffectiveScope, type ProjectConfig, WRITE_DENY } from "./profiles.ts";
+import { ALWAYS_DENY, type EffectiveScope, WRITE_DENY } from "./sandbox-profiles.ts";
+import type { ProjectConfig } from "./project-config.ts";
 
 export type StepId = "brainstorm" | "grill-me" | "design" | "build" | "review";
 export const STEP_IDS: StepId[] = ["brainstorm", "grill-me", "design", "build", "review"];

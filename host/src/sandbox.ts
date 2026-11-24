@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { workbenchDir } from "./workdir.ts";
 import { matchesAny } from "./policy.ts";
-import { ALWAYS_DENY } from "./profiles.ts";
+import { ALWAYS_DENY } from "./sandbox-profiles.ts";
 
 // Ferramentas instaladas na home que os comandos do projeto costumam precisar (só leitura).
 const HOME_TOOLCHAINS = [".nvm", ".volta", ".bun", "go", ".cargo", ".rustup", ".local/share/pnpm"];
