@@ -1,9 +1,9 @@
 // Workflows: etapas com entradas, saída e escopo próprios, encadeadas por arquivos
 // em docs/workbench/. O design precisa ser aprovado (por hash) antes do build.
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
-import { workbenchDir } from "./workdir.ts";
+import { workbenchDir, writeInside } from "./workdir.ts";
 import { ALWAYS_DENY, type EffectiveScope, type ProjectConfig, WRITE_DENY } from "./profiles.ts";
 
 export type StepId = "brainstorm" | "grill-me" | "design" | "build" | "review";
@@ -185,7 +185,7 @@ function migrateLegacyState(root: string): void {
 
 export function saveState(root: string, state: State): void {
 	workbenchDir(root);
-	writeFileSync(statePath(root), JSON.stringify(state, null, 2) + "\n");
+	writeInside(statePath(root), JSON.stringify(state, null, 2) + "\n");
 }
 
 export function fileHash(root: string, rel: string): string | undefined {

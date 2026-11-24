@@ -108,7 +108,7 @@ As chaves antigas em português (`perfil`, `negar`, `perfis`) dão erro com a in
 - **Sandbox aplicado antes da ação:** a chamada bloqueada volta para o modelo como erro e não acontece.
 - **Ferramentas que o sandbox não permite nem são oferecidas ao modelo.** Por exemplo, o `read-only` não recebe `write` nem `bash`.
 - **Segredos redigidos** (chaves Anthropic, OpenAI, GitHub, AWS, Google, Slack e chaves privadas) antes de entrarem no transcript e no payload enviado ao provedor.
-- **Comandos detectados** a partir de `package.json`, `go.mod` e `Cargo.toml`, listados para o modelo.
+- **Comandos detectados** a partir de `package.json`, `go.mod` e `Cargo.toml`, na raiz e em subpastas até 2 níveis (monorepos como `apps/mobile`), listados para o modelo já com o `cd` necessário (ex.: `cd apps/mobile && npm test`).
 - **Auditoria** em `<projeto>/.workbench/runs/<run>.jsonl`, fora do git. Registra cada decisão e cada envio ao provedor (modelo, bytes e sha256, nunca o conteúdo), os tokens de cada resposta do modelo (evento `usage`: entrada, cache, saída, raciocínio e custo, cobrado ou estimado) com o total no evento `end`, além dos arquivos alterados segundo o git. O resumo no fim do `wb run`/`wb step run` mostra o total de tokens. O agente não lê `.workbench/`: trechos de runs anteriores não voltam ao modelo.
 
 ## Testes

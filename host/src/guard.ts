@@ -3,9 +3,9 @@
 // qualquer .git) não têm como ser montados, então o host tira uma foto antes do run
 // e põe de lado o que aparecer. A foto fica em .workbench/ (só leitura para o bash),
 // para que um run interrompido (erro, Ctrl-C, kill) seja tratado no próximo uso.
-import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
-import { workbenchDir } from "./workdir.ts";
+import { workbenchDir, writeInside } from "./workdir.ts";
 
 // Uma foto por run, para que dois runs simultâneos no mesmo projeto não apaguem a do outro.
 const markerPath = (root: string, runId: string) => path.join(root, ".workbench", `run-${runId}.json`);
@@ -47,7 +47,7 @@ export function findGitEntries(root: string, maxDepth = 12): string[] {
 export function beginGuard(root: string, runId: string): Snapshot {
 	const snap: Snapshot = { runId, pid: process.pid, configExisted: existsSync(path.join(root, CONFIG)), gits: findGitEntries(root) };
 	workbenchDir(root);
-	writeFileSync(markerPath(root, runId), JSON.stringify(snap) + "\n");
+	writeInside(markerPath(root, runId), JSON.stringify(snap) + "\n");
 	return snap;
 }
 

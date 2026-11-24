@@ -2,7 +2,7 @@
 // roda o bash no sandbox, redige segredos e audita o que vai para o modelo.
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { appendFileSync, mkdirSync, realpathSync } from "node:fs";
+import { mkdirSync, realpathSync } from "node:fs";
 import { beginGuard, endGuard, type Quarantined, recoverInterrupted } from "./guard.ts";
 import os from "node:os";
 import path from "node:path";
@@ -21,7 +21,7 @@ import { type DetectedCommand, detectCommands } from "./detect.ts";
 import { checkPath, matchesAny, redactSecrets } from "./policy.ts";
 import { type EffectiveScope, loadProjectConfig, type SandboxName, resolveScope } from "./profiles.ts";
 import { findDeniedFiles, sandboxAvailable, wrapCommand } from "./sandbox.ts";
-import { auditDirFor } from "./workdir.ts";
+import { appendInside, auditDirFor } from "./workdir.ts";
 
 export interface Decision {
 	tool: string;
@@ -233,7 +233,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	mkdirSync(auditDir, { recursive: true });
 	const auditPath = path.join(auditDir, `${runId}.jsonl`);
 	const audit = (event: string, data: Record<string, unknown>) =>
-		appendFileSync(auditPath, JSON.stringify({ ts: new Date().toISOString(), runId, event, ...data }) + "\n");
+		appendInside(auditPath, JSON.stringify({ ts: new Date().toISOString(), runId, event, ...data }) + "\n");
 
 	const decisions: Decision[] = [];
 	const decide = (tool: string, target: string, allowed: boolean, reason?: string, by: Decision["by"] = "sandbox") => {
