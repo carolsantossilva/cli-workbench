@@ -50,18 +50,22 @@ export function beginGuard(root: string, runId: string): Snapshot {
 	return snap;
 }
 
-/** Põe de lado o que o run criou nos caminhos protegidos e apaga a foto. */
-export function endGuard(root: string, snap: Snapshot): Quarantined[] {
+const SAFE_ID = /^[\w-]+$/;
+
+/** Põe de lado o que o run criou nos caminhos protegidos e apaga a foto (a lida, se veio de recoverInterrupted). */
+export function endGuard(root: string, snap: Snapshot, marker = markerPath(root, snap.runId)): Quarantined[] {
 	const moved: Quarantined[] = [];
+	const id = SAFE_ID.test(snap.runId) ? snap.runId : "desconhecido";
 	const aside = (rel: string) => {
-		const to = `${rel}.rejeitado-${snap.runId}`;
+		let to = `${rel}.rejeitado-${id}`;
+		for (let n = 2; existsSync(path.join(root, to)); n++) to = `${rel}.rejeitado-${id}-${n}`;
 		renameSync(path.join(root, rel), path.join(root, to));
 		moved.push({ path: rel, movedTo: to });
 	};
 	if (!snap.configExisted && existsSync(path.join(root, CONFIG))) aside(CONFIG);
 	const known = new Set(snap.gits);
 	for (const g of findGitEntries(root)) if (!known.has(g)) aside(g);
-	rmSync(markerPath(root, snap.runId), { force: true });
+	rmSync(marker, { force: true });
 	return moved;
 }
 
@@ -88,12 +92,14 @@ export function recoverInterrupted(root: string): Quarantined[] {
 		let snap: Snapshot;
 		try {
 			snap = JSON.parse(readFileSync(marker, "utf8")) as Snapshot;
+			if (typeof snap.runId !== "string" || !Array.isArray(snap.gits)) throw new Error("foto inválida");
 		} catch {
 			rmSync(marker, { force: true });
 			continue;
 		}
 		if (snap.pid && snap.pid !== process.pid && alive(snap.pid)) continue;
-		for (const q of endGuard(root, snap)) {
+		// Apaga o arquivo efetivamente lido (inclui o execucao-ativa.json da versão anterior).
+		for (const q of endGuard(root, snap, marker)) {
 			moved.push(q);
 			process.stderr.write(`[workbench] o run ${snap.runId} foi interrompido; ${q.path} apareceu depois do início dele e foi movido para ${q.movedTo}. Se foi você que criou, renomeie de volta.\n`);
 		}

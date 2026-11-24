@@ -433,7 +433,7 @@ test("guarda: não limpa a foto de um run que ainda está vivo", () => {
 	assert.ok(existsSync(path.join(root, ".workbench/execucao-vivo.json")), "a foto do run vivo continua lá");
 });
 
-test("auditoria: pedido com segredo é gravado redigido e o hash do envio é do conteúdo redigido", async () => {
+test("auditoria: pedido com segredo é gravado redigido e cada envio registra a redação", async () => {
 	const root = makeProject("audit-segredo");
 	let sentText = "";
 	const { modelRuntime, model } = await fauxRuntime([
@@ -446,6 +446,8 @@ test("auditoria: pedido com segredo é gravado redigido e o hash do envio é do 
 	const log = readFileSync(r.auditPath, "utf8");
 	assert.ok(!log.includes(FAKE_KEY), "a chave não fica na auditoria");
 	assert.ok(!sentText.includes(FAKE_KEY), "a chave não vai ao modelo");
+	const sends = log.split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((e) => e.event === "send" && e.source === "context");
+	assert.ok(sends.length > 0 && sends.every((e) => e.secretsRedacted.length > 0));
 });
 
 test("guarda: dois runs no mesmo projeto têm fotos separadas", () => {
@@ -456,4 +458,26 @@ test("guarda: dois runs no mesmo projeto têm fotos separadas", () => {
 	assert.ok(existsSync(path.join(root, ".workbench/execucao-run-b.json")), "o fim do run A não apaga a foto do B");
 	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"codigo"}\n');
 	assert.equal(loadProjectConfig(root).perfil, undefined, "o B morto ainda é limpo");
+});
+
+test("guarda: foto da versão anterior (execucao-ativa.json) é limpa uma vez só", () => {
+	const root = makeProject("legado");
+	mkdirSync(path.join(root, ".workbench"), { recursive: true });
+	writeFileSync(path.join(root, ".workbench/execucao-ativa.json"), JSON.stringify({ runId: "20261120T000000-abc123", configExisted: false, gits: [".git"] }));
+	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"codigo"}\n');
+	assert.equal(loadProjectConfig(root).perfil, undefined);
+	assert.ok(!existsSync(path.join(root, ".workbench/execucao-ativa.json")), "a foto antiga foi removida");
+	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"docs"}\n');
+	assert.equal(loadProjectConfig(root).perfil, "docs", "uma configuração criada depois continua valendo");
+	assert.equal(loadProjectConfig(root).perfil, "docs");
+});
+
+test("guarda: runId malicioso na foto não sai de .workbench/", () => {
+	const root = makeProject("runid");
+	mkdirSync(path.join(root, ".workbench"), { recursive: true });
+	writeFileSync(path.join(root, "alvo.json"), "{}\n");
+	writeFileSync(path.join(root, ".workbench/execucao-x.json"), JSON.stringify({ runId: "/../../alvo", configExisted: true, gits: [".git"] }));
+	loadProjectConfig(root);
+	assert.ok(existsSync(path.join(root, "alvo.json")));
+	assert.ok(!existsSync(path.join(root, ".workbench/execucao-x.json")));
 });
