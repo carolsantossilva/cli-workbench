@@ -44,10 +44,10 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 4. **As especificações ficam num repo ou numa issue, conforme o contexto.**
    - **Num repo:** em `docs/workbench/` daquele repo, como hoje. Entram no git, no histórico e nas PRs do código a que se referem.
    - **Numa issue:** cada etapa vira o corpo da issue ou um comentário nela. Serve para discussões, decisões que envolvem vários repos, ou ideias que ainda não têm repo.
-   - O destino é escolhido por run (ex.: `--spec repo:<nome>` ou `--spec issue:<repo>#<n>`). Um padrão pode ficar no `.workbench.json`.
+   - O destino é escolhido por run (ex.: `--spec repo:<nome>` ou `--spec issue:<dono>/<repo>#<n>`). Um padrão pode ficar no `.workbench.json`.
    - Projetos que já têm `docs/workbench/` dentro de um repo continuam funcionando sem migração: é o destino "repo".
    - Issues são só do GitHub, via `gh`, usando o login que o `gh` já tem.
-   - O agente só lê o corpo e os comentários escritos por quem tem permissão `admin` no repo da issue. O host confere isso pela API de permissões do GitHub (`/repos/{dono}/{repo}/collaborators/{usuário}/permission`), não pelo `author_association` do comentário, que não distingue admin de outros colaboradores. O resto da issue não chega ao modelo.
+   - O agente só lê o corpo e os comentários escritos por quem tem permissão `admin` no repo da issue. O host confere isso pela API de permissões do GitHub (`/repos/{dono}/{repo}/collaborators/{usuário}/permission`), não pelo `author_association` do comentário, que não distingue admin de outros colaboradores. Como quem tem escrita no repo pode editar textos de outras pessoas, o host também confere quem fez a última edição (campo `editor` da API GraphQL); texto editado por quem não é admin fica de fora. Autor, editor e conteúdo vêm da mesma consulta. Se a permissão não puder ser conferida (falta de acesso do `gh`, bot, GitHub App, conta apagada), o texto fica de fora. O resto da issue não chega ao modelo.
 
 5. **Cada etapa roda no seu nível.**
    - `brainstorm`, `grill-me` e `design` leem o projeto inteiro, incluindo os repos, e escrevem só no destino da especificação.
