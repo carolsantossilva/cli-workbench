@@ -185,7 +185,7 @@ function scopeCommand(root: string, args: Args, rest: string[]) {
 	const scope = resolveScope(args.sandbox, loadProjectConfig(root));
 	console.log(describeScope(scope, detectCommands(root)));
 	// .workbench/ também é negada, mas é do próprio wb: não entra na lista de sensíveis.
-	const masked = findDeniedFiles(root, scope.deny).map((f) => f.slice(root.length + 1)).filter((f) => !f.startsWith(".workbench/"));
+	const masked = findDeniedFiles(root, scope.deny).map((f) => f.slice(root.length + 1)).filter((f) => !f.split("/").includes(".workbench"));
 	console.log(`\nArquivos sensíveis encontrados (negados e mascarados no sandbox): ${masked.join(", ") || "nenhum"}`);
 	console.log(`Sandbox (bwrap): ${sandboxAvailable() ? "disponível" : "NÃO ENCONTRADO"}`);
 }

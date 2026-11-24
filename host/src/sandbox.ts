@@ -40,7 +40,11 @@ export function findDeniedFiles(root: string, deny: readonly string[], maxDepth 
 		}
 		for (const e of entries) {
 			const r = rel ? `${rel}/${e.name}` : e.name;
-			if (e.name === ".git") {
+			if (e.name === ".workbench" && e.isDirectory()) {
+				// Estado e auditoria do wb: a pasta inteira entra na lista (mascarada de uma vez no
+				// sandbox), sem descer nela; um item por arquivo cresceria com cada run.
+				out.push(path.join(dir, e.name));
+			} else if (e.name === ".git") {
 				// .git aninhado, pasta ou arquivo (submódulo/worktree: "gitdir: ..."), entra na
 				// lista para ser montado só leitura; o da raiz é tratado em PROTECTED.
 				if (rel) out.push(path.join(dir, e.name));
@@ -85,6 +89,9 @@ export function buildSandboxArgs(root: string, cwd: string, deny: readonly strin
 		// .git aninhados (submódulos, repositórios dentro do projeto) entram como só leitura.
 		if (path.basename(f) === ".git") {
 			if (writable) args.push("--ro-bind", f, f);
+		} else if (path.basename(f) === ".workbench") {
+			// Some com o conteúdo: no lugar, uma pasta vazia e só leitura.
+			args.push("--tmpfs", f, "--remount-ro", f);
 		} else args.push("--ro-bind", "/dev/null", f);
 	}
 	args.push(
