@@ -209,14 +209,18 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 
 	// Liberações "até o fim da execução", por arquivo exato e modo.
 	const granted = { read: new Set<string>(), write: new Set<string>() };
-	// Perguntas em série: chamadas paralelas do modelo não abrem dois prompts juntos.
-	let askQueue: Promise<unknown> = Promise.resolve();
+	// Perguntas em série (aprovações e ask_user na mesma fila): chamadas paralelas do
+	// modelo não abrem dois prompts juntos, e um terminal só atende uma pergunta por vez.
+	let promptQueue: Promise<unknown> = Promise.resolve();
+	const serial = <T>(f: () => Promise<T>): Promise<T> => {
+		const next = promptQueue.then(f);
+		promptQueue = next.catch(() => {});
+		return next;
+	};
 	const askUser = (req: ApprovalRequest): Promise<ApprovalAnswer> => {
 		const ask = opts.ask;
 		if (!ask) return Promise.resolve("deny");
-		const next = askQueue.then(() => ask(req)).catch(() => "deny" as const);
-		askQueue = next;
-		return next;
+		return serial(() => ask(req)).catch(() => "deny" as const);
 	};
 
 	async function gate(tool: string, input: string, mode: "read" | "write") {
@@ -244,7 +248,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 				description: "Faz uma pergunta ao usuário e espera a resposta. Use para decisões que só o usuário pode tomar; uma pergunta por chamada.",
 				parameters: Type.Object({ question: Type.String({ description: "A pergunta, curta e concreta, com uma recomendação se houver" }) }),
 				async execute(_id, params) {
-					const resposta = (await askUserFn(params.question)).trim();
+					const resposta = (await serial(() => askUserFn(params.question))).trim();
 					audit("question", { bytes: Buffer.byteLength(resposta) });
 					return { content: [{ type: "text", text: resposta || "(sem resposta: decida com uma premissa explícita)" }], details: {} };
 				},

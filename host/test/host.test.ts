@@ -481,3 +481,43 @@ test("guarda: runId malicioso na foto não sai de .workbench/", () => {
 	assert.ok(existsSync(path.join(root, "alvo.json")));
 	assert.ok(!existsSync(path.join(root, ".workbench/run-x.json")));
 });
+
+test("aprovação e ask_user nunca ficam abertas ao mesmo tempo", async () => {
+	const root = makeProject("serial");
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage(
+			[
+				fauxToolCall("ask_user", { question: "qual nome?" }),
+				fauxToolCall("write", { path: "src/a.ts", content: "a\n" }),
+				fauxToolCall("ask_user", { question: "e a cor?" }),
+				fauxToolCall("write", { path: "src/b.ts", content: "b\n" }),
+			],
+			{ stopReason: "toolUse" },
+		),
+		fauxAssistantMessage([fauxText("ok")]),
+	]);
+	let open = 0;
+	let maxOpen = 0;
+	const calls: string[] = [];
+	// Um terminal real (readline) só atende uma pergunta por vez: a segunda nunca resolveria.
+	const prompt = async <T>(label: string, answer: T): Promise<T> => {
+		open++;
+		maxOpen = Math.max(maxOpen, open);
+		calls.push(label);
+		await new Promise((r) => setTimeout(r, 10));
+		open--;
+		return answer;
+	};
+	await runTask({
+		projectDir: root,
+		task: "x",
+		sandbox: "docs-only",
+		modelRuntime,
+		modelOverride: model,
+		auditDir: path.join(tmp, "audit"),
+		ask: (req) => prompt(`ask ${req.path}`, "once" as const),
+		askUser: (q) => prompt(`user ${q}`, "azul"),
+	});
+	assert.equal(calls.length, 4);
+	assert.equal(maxOpen, 1);
+});
