@@ -3,7 +3,8 @@
 - **Status:** proposed
 - **Escrito em:** 2026-11-24
 - **Escopo:** o que o `wb` entende por "projeto", onde ficam as especificações, onde cada etapa roda e onde ficam estado e auditoria.
-- **Decidido em 2026-11-24:** os itens 2 (repos detectados, `.workbench.json` só com exceções), 3 (`.workbench/` marca o projeto), 4 (as especificações ficam num repo ou numa issue, conforme o contexto, com issues só do GitHub e só comentários de admins) e 6 (o `wb` cria as worktrees) da Decisão. O resto continua proposto.
+- **Decidido em 2026-11-24:** repos detectados e `.workbench.json` só com exceções (item 2); `.workbench/` como marcador do projeto (item 3); especificações num repo ou numa issue, com issues só do GitHub e só texto de admins (item 4); o `wb` cria as worktrees (item 6).
+- **Propostos em 2026-11-24, para revisão:** como as configurações de repo e projeto se combinam (item 3), o nome curto e o `build` de um repo por run (item 5), o destino sem padrão (item 4), a profundidade da busca (item 2) e o canal remoto (item 8). Não há pontos em aberto; se estes forem aceitos, o ADR vira `accepted`.
 - **Implementação:** parcial. A auditoria já foi para `<projeto>/.workbench/runs/` (PR #5). Hoje "projeto" ainda é um único diretório, na prática um repo. O resto deste ADR não foi implementado.
 
 ## Contexto
@@ -34,17 +35,18 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 
 2. **Os repos são detectados, não declarados.**
    - Segue o princípio que substituiu o `workspace.json` da CLI em Go, escrito à mão e central: sandboxes prontos, detecção em vez de declaração (como os comandos de teste, em `detect.ts`) e um arquivo pequeno por projeto, só com exceções.
-   - Repo é todo diretório dentro do projeto com `.git` (pasta, ou arquivo no caso de worktree), sem descer em `node_modules` nem em `.workbench/`.
+   - Repo é todo diretório dentro do projeto com `.git` (pasta, ou arquivo no caso de worktree), até 3 níveis abaixo da pasta do projeto, o que cobre `.worktree/<repo>/<branch>`. A busca não desce em `node_modules`, em `.workbench/` nem dentro de um repo já achado: repositórios aninhados num repo (submódulos) são parte dele, não do projeto.
    - O `.workbench.json` continua só com exceções: as de hoje (`sandbox`, `deny`, `write`) e, com este ADR, o destino padrão das especificações e o lugar dos clones. Ele não lista repos.
    - O `wb` não lê manifestos de ferramentas pessoais, como o `repos` de um script de organização.
 
 3. **A pasta `.workbench/` marca o projeto.**
    - Ela é criada por `wb init` na pasta do projeto, ou no primeiro run.
    - Para achar o projeto, o `wb` parte da raiz do repo atual e sobe pelos diretórios acima dela até achar uma `.workbench/`. Se achar, aquele diretório é o projeto.
-   - A busca para antes de entrar em outro repo git (um repo de fora não vira projeto do de dentro) e nunca considera a home nem o que está acima dela.
+   - A busca para antes de entrar em outro repo git, ou seja, num diretório com `.git` (pasta ou arquivo): um repo de fora não vira projeto do de dentro. Ela nunca considera a home nem o que está acima dela, comparando caminhos reais, depois de resolver symlinks.
    - Se não achar, o projeto é o próprio repo (ou o diretório atual, fora de um repo). É o comportamento de hoje.
    - A busca começa **acima** da raiz do repo: um `.workbench/` que um run antigo deixou dentro do repo não impede que o projeto de fora seja achado. Esse `.workbench/` antigo deixa de ser usado; a auditoria que está nele continua lá.
-   - Se o repo tem um `.workbench.json` próprio, os `deny` dele continuam valendo e somam com os do projeto: aparecer um projeto em volta nunca afrouxa o sandbox. Como o `sandbox` e o `write` do repo se combinam com os do projeto fica em aberto.
+   - Se o repo tem um `.workbench.json` próprio, os `deny` dele continuam valendo e somam com os do projeto: aparecer um projeto em volta nunca afrouxa o sandbox.
+   - Para `sandbox` e `write`, vale o mais próximo: num run dentro de um repo, os valores do `.workbench.json` do repo vencem os do projeto, e o do projeto só preenche o que o repo não define. Assim, um repo que já tinha configuração continua se comportando como antes. Os globs de `write` são sempre relativos à raiz do repo e não liberam nada fora dele.
    - `-C` continua indicando o projeto explicitamente.
 
 4. **As especificações ficam num repo ou numa issue, conforme o contexto.**
@@ -53,18 +55,23 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
    - O destino é escolhido por run (ex.: `--spec repo:<nome>` ou `--spec issue:<dono>/<repo>#<n>`). Um padrão pode ficar no `.workbench.json`.
    - Precedência: a flag `--spec` vence o `.workbench.json`, como o `--sandbox` já faz hoje, e o `.workbench.json` vence o estado guardado. O número de issue guardado em `.workbench/state.json` só completa um destino sem número.
    - Projetos que já têm `docs/workbench/` dentro de um repo continuam funcionando sem migração: é o destino "repo".
+   - Sem `--spec` e sem padrão: num projeto de um repo só, o destino é o próprio repo, como hoje. Num projeto com vários repos, o `wb` pergunta no primeiro `brainstorm` e guarda a escolha no estado; com `--no-input`, ou sem terminal, ele para com erro pedindo `--spec`, sem escolher sozinho um lugar para publicar.
    - Issues são só do GitHub, via `gh`, usando o login que o `gh` já tem.
    - Não há regra de quantas issues por ideia. Com `--spec issue:<dono>/<repo>#<n>`, a saída da etapa vira um comentário naquela issue. Com `--spec issue:<dono>/<repo>` (sem número), o `wb` abre uma issue nova e guarda o número em `.workbench/state.json`; as etapas seguintes continuam nela até outro `--spec` dizer o contrário. Assim dá para juntar as etapas numa issue só ou separar em várias, conforme o caso.
    - O agente só lê o corpo e os comentários escritos por quem tem permissão `admin` no repo da issue. O host confere isso pela API de permissões do GitHub (`/repos/{dono}/{repo}/collaborators/{usuário}/permission`), não pelo `author_association` do comentário, que não distingue admin de outros colaboradores. Como quem tem escrita no repo pode editar textos de outras pessoas, o host também confere quem fez a última edição (campo `editor` da API GraphQL); texto editado por quem não é admin fica de fora. "Nunca editado" se confere por `lastEditedAt` vazio, não por `editor` nulo: `lastEditedAt` preenchido com `editor` nulo (conta apagada) também fica de fora. Autor, editor e conteúdo vêm da mesma consulta. Se a permissão não puder ser conferida (falta de acesso do `gh`, bot, GitHub App, conta apagada), o texto fica de fora. O resto da issue não chega ao modelo.
 
 5. **Cada etapa roda no seu nível.**
    - `brainstorm`, `grill-me` e `design` leem o projeto inteiro, incluindo os repos, e escrevem só no destino da especificação.
-   - `build` e `wb run` rodam num **repo**, escolhido com `--repo <caminho ou nome>` ou pelo diretório atual quando ele está dentro de um repo do projeto. A raiz do sandbox é o repo. A especificação entra como leitura, exceto o plano, que o `build` atualiza.
+   - `build` e `wb run` rodam num **repo**, escolhido com `--repo` ou pelo diretório atual quando ele está dentro de um repo do projeto. A raiz do sandbox é o repo. A especificação entra como leitura, exceto o plano, que o `build` atualiza.
+   - `--repo` aceita um caminho relativo ao projeto, ou o nome do repositório no remoto `origin` (ex.: `cli-workbench`), quando só há uma worktree dele. Com várias, aceita `<nome>@<branch>`; se o nome for ambíguo, o `wb` para e lista as opções.
+   - Um `build` mexe em **um repo por run**. Se o plano tem lotes em repos diferentes, cada lote indica o repo e roda no seu próprio run, em sequência. O sandbox continua com uma raiz de código só, e cada run tem a sua auditoria.
    - Auditoria e estado ficam sempre no `.workbench/` do projeto, qualquer que seja o nível do run.
 
 6. **O `wb` cria as worktrees.** Um comando (nome a definir, ex.: `wb repo checkout <repo> <branch>`) cria a worktree de um repo do projeto em `.worktree/<repo>/<branch>`, a partir da branch base atualizada. O mesmo comando reabre a worktree se ela já existir. O `build` pode pedir uma worktree nova em vez de exigir que ela já exista. O lugar dos clones (dentro do projeto ou numa pasta compartilhada entre projetos) fica configurável no `.workbench.json`.
 
 7. **Symlinks continuam bloqueados.** Um link dentro do projeto que aponta para fora dele, como um link para o clone original, segue negado. Isso também impede o agente de mexer num clone que deveria ficar limpo.
+
+8. **O canal remoto só vê projetos liberados.** O canal remoto (ex.: WhatsApp) não varre o disco atrás de projetos. A configuração do canal lista os diretórios que ele pode usar (ex.: `~/projetos/*`), e dentro deles valem os projetos com `.workbench/`. Uma mensagem que chega de fora só alcança o que foi liberado de propósito.
 
 ## Alternativas consideradas
 
@@ -73,6 +80,8 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 - **A pasta do projeto vira um repo git só de especificações.** Daria histórico, mas cria um repo a mais por projeto e afasta a decisão do código ou da discussão a que ela pertence. Rejeitada em 2026-11-24.
 - **Declarar os repos em `.workbench.json` (chave `repos`).** Foi a primeira versão deste ADR. Contradiz o combinado de detectar em vez de declarar, e o `wb` acha os repos sozinho pelo `.git`. Rejeitada em 2026-11-24.
 - **`.workbench.json` como marcador do projeto.** Obrigaria a criar o arquivo mesmo sem exceções. A pasta `.workbench/` já existe em todo projeto usado pelo `wb`. Rejeitada em 2026-11-24.
+- **Um `build` com vários repos no mesmo sandbox.** Exigiria várias raízes de escrita e misturaria a auditoria de repos diferentes num run. Um run por repo resolve o mesmo caso em sequência.
+- **O canal remoto descobre os projetos sozinho.** Tornaria qualquer projeto no disco alcançável por uma mensagem de fora. Uma lista explícita no canal limita isso.
 - **Ler o manifesto do script de organização diretamente.** Funcionaria para quem usa esse script, mas prende o `wb` a uma convenção pessoal, e a detecção dispensa o manifesto.
 - **Auditoria global em `~/.local/state/workbench/runs/` (como era antes da PR #5).** Misturava runs de todos os projetos e afastava a auditoria do projeto a que ela se refere. Foi trocada por `.workbench/runs/` dentro do projeto, que se ignora no git sozinha e que o agente não lê.
 
@@ -86,7 +95,7 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 - **Aprovação do design:**
   - num repo, continua sendo o sha256 do arquivo;
   - numa issue, é o sha256 do texto aprovado, guardado em `.workbench/state.json` junto com a referência da issue (e do comentário, se o design for um).
-- O sandbox do `build` pode ter duas áreas de escrita: o repo do código e o plano, quando a especificação está em outro repo. Hoje a raiz é uma só, então `sandbox.ts` e `policy.ts` precisam aceitar mais de uma raiz, cada uma com suas regras.
+- Quando a especificação está em outro repo, o `build` tem uma segunda área de escrita além do repo do código: só o arquivo do plano. Hoje a raiz é uma só, então `sandbox.ts` e `policy.ts` precisam aceitar esse arquivo extra. Quando o plano está numa issue, o agente atualiza um rascunho local e o host publica.
 - `wb status` mostra as etapas do projeto, onde está cada especificação e, para cada repo, os runs que aconteceram nele.
 - O `git status` usado para listar os arquivos alterados roda em cada repo tocado, não só na raiz.
 - Numa worktree, `.git` é um arquivo que aponta para o clone (`gitdir: ...`), que pode estar fora do projeto. O `git worktree add` e o `fetch` rodam no host, fora do sandbox. Dentro do sandbox, o `.git` da worktree continua só leitura, como hoje, e o clone externo fica fora da raiz. Por isso o agente não faz commit; commits ficam com o usuário ou com um passo do host.
@@ -94,9 +103,4 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 
 ## Em aberto antes da aceitação
 
-- O nome curto que o `--repo` aceita: o nome da pasta, ou o nome do repositório no remoto (ex.: `workbench` para `.worktree/workbench/feat-x`).
-- Até que profundidade o `wb` procura repos dentro do projeto.
-- Como o `sandbox` e o `write` do `.workbench.json` de um repo se combinam com os do projeto (os `deny` somam, item 3).
-- Como o canal remoto (WhatsApp) sabe quais projetos existem: varrendo uma pasta raiz (ex.: `projetos/*`) atrás de `.workbench/`.
-- Um `build` que precise mexer em dois repos ao mesmo tempo: um run por repo, ou um sandbox com vários repos.
-- Quem escolhe o destino quando não há padrão: o `wb` pergunta no primeiro `brainstorm`, ou exige `--spec`.
+Nenhum. Os itens propostos estão listados no cabeçalho.
