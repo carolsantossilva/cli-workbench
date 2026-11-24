@@ -60,7 +60,7 @@ ${COMMON_OPTIONS}
 const color = process.stderr.isTTY && !process.env.NO_COLOR;
 // Texto vindo do modelo (caminhos, comandos, perguntas) não pode trazer sequências ANSI
 // ou quebras de linha que falsifiquem o que aparece no terminal.
-const safe = (s: string) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+const safe = (s: string) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
 const oneLine = (s: string) => safe(s).replace(/\n/g, "\\n");
 const dim = (s: string) => (color ? `\x1b[2m${s}\x1b[0m` : s);
 const bold = (s: string) => (color ? `\x1b[1m${s}\x1b[0m` : s);
