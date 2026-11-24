@@ -2,7 +2,7 @@
 
 A Workbench como **o agente**, e não só como orientadora de um agente externo. Segue a direção do [ADR 0001](../docs/adr/0001-workbench-como-host-de-agente.md). Ela roda uma tarefa num projeto local usando o SDK do [Pi](https://pi.dev/) e aplica um **sandbox (perfil de permissão) antes de cada ação**.
 
-Este código não substitui o núcleo Go. É um experimento para validar três premissas:
+É a implementação da Workbench desde a remoção da CLI Go (ver o [README da raiz](../README.md)). Começou como experimento para validar três premissas, todas confirmadas no MVP:
 - TypeScript como linguagem do host;
 - sandboxes prontos com exceções, em vez de um `workspace.json` escrito à mão;
 - sandbox no bash.

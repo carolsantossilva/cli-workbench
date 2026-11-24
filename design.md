@@ -1,204 +1,124 @@
-# Workbench — Especificação inicial da V1
+# Workbench — Especificação da V1
 
-Status: rascunho aprovado para documentação inicial
-Público principal: desenvolvedor individual
-Interface: CLI
-Prioridade: Codex-first
+- **Status:** V1 do host, conforme o [ADR 0001](docs/adr/0001-workbench-como-host-de-agente.md). Substitui a especificação Codex-first, que está no histórico do git.
+- **Público principal:** desenvolvedor individual, numa máquina local.
+- **Interface:** CLI (`wb`).
+- **Implementação:** [`host/`](host/README.md), em TypeScript sobre o SDK do Pi.
 
 ## 1. Visão
 
-A Workbench será uma CLI composta por workflows, skills e especificações para orientar um agente de IA na construção e evolução de software.
+A Workbench é **o agente**. Ela roda o loop do modelo, escolhe o contexto de cada etapa e aplica as regras antes de cada ação. Não é só uma orientadora de um agente externo. O raciocínio continua sendo do modelo; o que a Workbench controla é o que ele vê, o que pode fazer e o que fica registrado.
 
-Ela não será, na V1, uma IDE, um serviço de modelos ou uma plataforma com banco de dados próprio. O agente existente continua responsável por raciocinar, chamar ferramentas e executar as mudanças. A Workbench define como o trabalho deve ser conduzido, quais decisões precisam ser tomadas e quais artefatos devem ser produzidos.
+O objetivo de longo prazo é um orquestrador local e genérico. Cada tarefa vai para um agente ou para um workflow, com modelos remotos ou locais, e pode ser controlada de fora do terminal (ver §10).
 
-O filesystem e o Git do próprio projeto são a fonte de verdade. Não haverá um Project Store separado.
+O filesystem e o git do próprio projeto são a fonte de verdade. Não há banco de dados nem estado de projeto separado.
 
 ## 2. Objetivo da V1
 
-Validar um fluxo semiautônomo e controlado para criar aplicações full-stack, começando por um caminho opinativo baseado em:
-
-- React Native/Expo para o aplicativo;
-- React para a aplicação web;
-- TypeScript no cliente;
-- Go para o servidor;
-- monorepo como estrutura padrão;
-- execução local;
-- workflows guiados por políticas e checkpoints de design.
-
-O quick win principal será o fluxo **design-to-scaffold** de um monorepo:
+Validar um fluxo semiautônomo e controlado para construir e evoluir software num projeto local:
 
 ```text
-ideia → brainstorm → grill-me → design aprovado → scaffold → testes/revisão
+ideia → brainstorm → grill-me → design aprovado → build → review
 ```
 
-A implementação de funcionalidades completas será adicionada gradualmente, em lotes definidos pelo workflow e controlados pelas políticas do workspace.
+E também tarefas avulsas (`wb run`) sob um sandbox.
 
-### Projeto de validação da Workbench
+Na V1 há dois tipos de autonomia:
+- **Ações dentro do sandbox** acontecem sem pedir licença.
+- **Ações fora dele** viram pergunta ao usuário (aprovação interativa) ou são negadas. Regras fixas, como arquivos sensíveis, `.git` e a configuração da Workbench, nunca são liberadas.
 
-O primeiro projeto construído pela Workbench será um app de tarefas/planner pessoal inspirado no Tiimo. Ele servirá como caso de dogfooding da Workbench.
+### Projeto de validação
 
-O ponto de partida será uma ideia curta, por exemplo:
+O primeiro uso real é o dogfooding num app pessoal de tarefas e rotina. A validação mede a Workbench, não o app:
+- os workflows produzem os artefatos certos;
+- o sandbox segura o que deve segurar;
+- a auditoria registra o que foi enviado.
 
-> Quero criar um app de tarefas parecido com o Tiimo.
+## 3. Modos de uso
 
-A Workbench deverá usar seus próprios workflows de brainstorm, grill-me e design para descobrir requisitos, limites, arquitetura e critérios de aceite do app. Não haverá um contrato funcional detalhado definido antecipadamente para o projeto-alvo.
+- **`wb run <tarefa>`:** uma tarefa avulsa sob um sandbox (`read-only`, `docs-only` ou `workspace-write`).
+- **`wb step run <etapa>`:** uma etapa do workflow, com entradas, saída e escopo próprios.
+- **`wb step approve <etapa>`, `wb status` e `wb scope`:** aprovação por hash, estado do workflow e escopo efetivo.
 
-A validação se concentrará na Workbench: execução correta dos workflows, produção dos artefatos, criação e evolução do `workspace.json`, scaffold do monorepo, execução local, testes e respeito às políticas. O app de tarefas não implementará os workflows da Workbench.
+O mesmo fluxo vale para um projeto novo e para um repositório existente. Criar um projeto a partir de templates (`wb new`) fica para depois (§10).
 
-## 3. Modos de entrada
+## 4. Workflows
 
-### Projeto novo
+| Etapa | Objetivo | Lê | Escreve | Comandos | Pergunta ao usuário |
+|---|---|---|---|---|---|
+| `brainstorm` | transformar a ideia em entendimento compartilhado: propósito, usuários, resultados e limites | `idea.md` e o projeto | `brief.md` | — | sim |
+| `grill-me` | desafiar o brief: ambiguidades, premissas, riscos e casos extremos | `brief.md` | `decisions.md` | — | sim |
+| `design` | especificar o próximo incremento o bastante para construir e verificar | `brief.md`, `decisions.md` e o código | `design.md` | — | não |
+| `build` | implementar o design aprovado em lotes pequenos, com testes | `design.md` aprovado | `plan.md` e o projeto | sandbox | não |
+| `review` | avaliar a mudança contra o design, o plano e os testes | `design.md`, `plan.md` e o diff | `review.md` | sandbox só leitura | não |
 
-`workbench:new` inicia um projeto a partir de uma ideia, conduz a descoberta e prepara o scaffold inicial de React Native/Expo, aplicação web React e servidor Go em um monorepo.
-
-### Repositório existente
-
-`workbench:existing` começa pela leitura da estrutura, convenções e estado do monorepo. Na V1, esse modo terá escopo mais limitado: análise, planejamento e pequenas alterações controladas.
-
-Ambos os modos convergem para os mesmos workflows de design, construção e revisão.
-
-## 4. Workflows da V1
-
-```text
-workbench:new ou workbench:existing
-        ↓
-brainstorm
-        ↓
-grill-me
-        ↓
-design
-        ↓
-build
-        ↓
-review
-```
-
-### Brainstorm
-
-Transforma uma ideia ou objetivo em entendimento compartilhado, requisitos, critérios de sucesso e limites de escopo.
-
-### Grill-me
-
-Submete o entendimento ou plano a uma entrevista crítica. Deve revelar ambiguidades, premissas frágeis, riscos, casos extremos e decisões ainda não resolvidas.
-
-### Design
-
-Produz uma especificação técnica suficiente para construir o próximo incremento. Deve registrar arquitetura, componentes, fluxo de dados, tratamento de erros, testes e decisões relevantes.
-
-Pesquisa arquitetural ampla e comparação sistemática de soluções ficam fora da V1; o design deve resolver apenas o necessário para o objetivo atual.
-
-### Build
-
-Executa o plano em lotes definidos pelo workflow. Cada lote deve apresentar intenção, arquivos afetados, comandos relevantes e critério de verificação. A execução prossegue automaticamente quando estiver dentro das políticas; exceções, bloqueios e ações não autorizadas interrompem o fluxo.
-
-### Review
-
-Verifica diff, testes, aderência ao design, riscos de segurança e possíveis violações das políticas de dados.
+- O `build` só roda com o `design.md` aprovado (`wb step approve design`, por sha256). Se o design mudar depois, a aprovação deixa de valer.
+- Pesquisa arquitetural ampla fica fora da V1. O design resolve só o necessário para o incremento atual.
 
 ## 5. Artefatos
 
-Os artefatos são arquivos legíveis no próprio repositório:
+Tudo fica em arquivos legíveis no próprio projeto:
 
 ```text
-workspace.json
-docs/workbench/brief.md
-docs/workbench/design.md
-docs/workbench/decisions.md
-docs/workbench/plan.md
+docs/workbench/idea.md, brief.md, decisions.md, design.md, plan.md, review.md
+.workbench.json          exceções opcionais: sandbox padrão, globs negados, escrita extra
+.workbench/state.json    aprovações (sha256) e últimas execuções
 ```
 
-Esses arquivos substituem qualquer estado interno de projeto. O histórico do Git registra a evolução do código e dos documentos.
+Fora do projeto, em `~/.local/state/workbench/runs/<run>.jsonl`, fica a auditoria de cada execução.
 
-### Workspace manifest
-
-O `workspace.json` é o contrato versionado da Workbench para o workspace. Ele deve conter, no mínimo:
-
-- `schemaVersion`;
-- identidade do workspace e tipo de estrutura (`monorepo` na V1);
-- projetos internos, com path e função, como `mobile`, `web`, `server` e `shared`;
-- comandos de desenvolvimento, teste, lint, build e diagnóstico;
-- políticas de execução, dados e mudanças externas;
-- configuração dos workflows, incluindo skills obrigatórias, skills permitidas, comandos permitidos, caminhos de leitura/escrita e artefatos esperados;
-- repositórios externos opcionais.
-
-O monorepo é o repositório principal. Repositórios externos são read-only por padrão e só podem ser alterados por uma política explícita.
-
-O manifesto não armazena estado transitório de sessões, logs ou histórico de execução. Ele descreve a composição e as regras evolutivas do workspace; o filesystem, o Git e os artefatos da Workbench guardam o restante.
+Não existe manifesto escrito à mão. O escopo vem de três fontes:
+- os sandboxes prontos;
+- a detecção automática dos comandos do projeto (`package.json`, `go.mod`, `Cargo.toml`);
+- as exceções pequenas do `.workbench.json`.
 
 ## 6. Protocolo de contexto
 
-Não haverá um Context Engine separado. A otimização de contexto será uma regra dos próprios workflows e poderá ser declarada no `workspace.json`.
-
-Cada workflow deve declarar:
-
-- quais arquivos e artefatos são entradas;
-- quais comandos de inspeção podem ser usados;
-- quais informações precisam ser resumidas;
-- qual artefato deve ser produzido;
-- quais informações serão passadas à próxima etapa.
-
-O `workspace.json` também pode declarar quais skills e comandos cada workflow pode usar. A CLI deve validar esse contrato antes e durante a execução; o manifesto não deve ser tratado apenas como documentação.
-
-O agente não deve reler o repositório inteiro em cada etapa. O fluxo deve priorizar artefatos, diffs, arquivos relevantes e resultados de comandos.
-
-Exemplo de handoff:
-
-```text
-brainstorm → brief.md
-grill-me → decisões e riscos incorporados ao design.md
-design → design.md
-build → plan.md + arquivos relevantes + design.md
-review → diff + testes + decisões
-```
+- Cada etapa roda numa sessão nova do modelo, e o contexto passa de uma etapa para a outra só pelos arquivos declarados.
+- O agente não relê o repositório inteiro em cada etapa: começa pelos artefatos e vai aos arquivos relevantes, aos diffs e aos resultados de comandos.
+- O system prompt de cada execução descreve o escopo efetivo: o que pode ler, escrever e rodar, e o que é sempre negado.
 
 ## 7. Governança de dados
 
-O envio de dados para provedores externos é permitido com controle. A execução da IA, porém, deve ser autônoma dentro das políticas declaradas, sem exigir um token literal de autorização em cada fase.
+O envio de dados ao provedor do modelo é permitido, com controle. Implementado na V1:
+- escopo de leitura e escrita por sandbox, aplicado antes de cada ação;
+- arquivos sensíveis sempre negados, também mascarados no sandbox do bash;
+- segredos redigidos antes do envio;
+- auditoria local de cada decisão e de cada envio (modelo, bytes e sha256, nunca o conteúdo);
+- três resultados para cada ação: permitir, perguntar ou bloquear.
 
-A V1 deve prever, no mínimo:
+Previsto e ainda não implementado:
+- lista de provedores permitidos por projeto;
+- aprovação antes de enviar uma categoria nova de dados.
 
-- política por projeto, pasta ou tipo de arquivo;
-- lista de provedores permitidos;
-- detecção e bloqueio ou mascaramento de segredos;
-- aprovação antes do envio de novas categorias de dados;
-- registro local do que foi preparado ou enviado para um provedor;
-- distinção explícita entre dados locais, dados permitidos e dados proibidos.
-
-As políticas devem permitir pelo menos três resultados para uma ação: permitir automaticamente, pedir autorização por ser uma exceção ou bloquear.
-
-Leitura, edição local e testes podem ser executados automaticamente quando estiverem dentro da política. Push, PR, deploy, alterações em sistemas externos e escrita em repositórios externos devem seguir as regras de mudanças externas do manifesto. Repositórios externos são read-only por padrão.
-
-Skills fornecem orientação, mas não são uma garantia técnica por si só. Quando o host do agente permitir, a Workbench deverá complementar as regras com comandos, hooks ou verificações determinísticas locais.
+Mudanças externas não fazem parte da V1: o sandbox não tem rede e a Workbench não faz push, PR nem deploy.
 
 ## 8. Princípios de execução
 
-- A Workbench tem uma CLI própria; não haverá interface gráfica própria.
-- Codex-first; o formato inicial deve aproveitar diretamente skills e workflows do Codex.
-- Sem chamadas próprias a modelos ou APIs de IA.
-- Sem banco de dados interno ou Project Store.
-- Filesystem e Git como fonte de verdade.
-- Autonomia delimitada por políticas: o agente executa tudo que estiver permitido e interrompe apenas em exceções, bloqueios ou ações que exigem autorização.
+- A Workbench é o agente, sobre o SDK do Pi.
+- Modelo configurável (`--model`). O padrão é o login do ChatGPT (`openai-codex/gpt-6-luna`, raciocínio `xhigh`), com o risco de termos de uso registrado no ADR 0001.
+- Sem banco de dados próprio. Filesystem e git como fonte de verdade.
+- Autonomia delimitada pelo sandbox: o agente faz tudo o que está permitido e só para em exceções, bloqueios ou ações que pedem autorização.
 - Construção incremental, com diffs e testes verificáveis.
 - Contexto mínimo suficiente para cada etapa.
 
 ## 9. Fora do escopo da V1
 
+- macOS e Windows: o sandbox usa `bubblewrap`, que é só do Linux;
+- Codex e Claude Code como agentes orientados;
+- canal remoto (WhatsApp ou outro);
 - interface web ou desktop;
-- execução cloud ou híbrida;
-- suporte profundo a várias stacks;
-- pesquisa arquitetural autônoma abrangente;
-- deploy e operação em produção;
-- múltiplos agentes independentes;
-- colaboração multiusuário;
-- construtor universal de qualquer tipo de sistema.
+- execução em nuvem;
+- vários agentes em paralelo;
+- deploy, operação e mudanças em sistemas externos;
+- colaboração multiusuário.
 
 ## 10. Evolução posterior
 
-Depois de validar o fluxo local, os próximos incrementos possíveis são:
-
-1. implementação de funcionalidades completas em lotes;
-2. suporte mais profundo a repositórios existentes;
-3. skill de pesquisa e decisão arquitetural;
-4. políticas e hooks de governança mais fortes;
-5. execução híbrida ou remota;
-6. suporte a outras stacks e agentes.
+1. `wb new` a partir de [`templates/`](templates/), adaptados ao host.
+2. macOS, com o sandbox nativo (Seatbelt via `sandbox-exec`), como o Codex faz.
+3. Canal remoto, com ADR próprio. Nenhum fluxo pode juntar dados privados, entrada não confiável e saída para fora.
+4. Modelos locais.
+5. Lista de provedores permitidos e aprovação por categoria de dados (§7).
+6. Saída estruturada (`--json`), `--dry-run` e `--quiet` na CLI.
+7. Vários agentes ou workflows em paralelo.
