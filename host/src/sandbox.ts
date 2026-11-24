@@ -1,8 +1,9 @@
 // Sandbox do bash via bubblewrap: sem rede, home escondida, só o projeto gravável,
 // arquivos sensíveis do projeto mascarados e ambiente limpo.
-import { existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { workbenchDir } from "./workdir.ts";
 import { matchesAny } from "./policy.ts";
 import { ALWAYS_DENY } from "./profiles.ts";
 
@@ -39,7 +40,11 @@ export function findDeniedFiles(root: string, deny: readonly string[], maxDepth 
 		}
 		for (const e of entries) {
 			const r = rel ? `${rel}/${e.name}` : e.name;
-			if (e.name === ".git") {
+			if (e.name === ".workbench" && e.isDirectory() && matchesAny(`${r}/x`, deny)) {
+				// Estado e auditoria do wb: a pasta inteira entra na lista (mascarada de uma vez no
+				// sandbox), sem descer nela; um item por arquivo cresceria com cada run.
+				out.push(path.join(dir, e.name));
+			} else if (e.name === ".git") {
 				// .git aninhado, pasta ou arquivo (submódulo/worktree: "gitdir: ..."), entra na
 				// lista para ser montado só leitura; o da raiz é tratado em PROTECTED.
 				if (rel) out.push(path.join(dir, e.name));
@@ -74,7 +79,7 @@ export function buildSandboxArgs(root: string, cwd: string, deny: readonly strin
 	args.push(writable ? "--bind" : "--ro-bind", realRoot, realRoot);
 	if (writable) {
 		// .workbench precisa existir para ser montado só leitura (senão o bash poderia criá-lo).
-		mkdirSync(path.join(realRoot, ".workbench"), { recursive: true });
+		workbenchDir(realRoot);
 		for (const p of PROTECTED) {
 			const abs = path.join(realRoot, p);
 			if (existsSync(abs)) args.push("--ro-bind", abs, abs);
@@ -84,6 +89,9 @@ export function buildSandboxArgs(root: string, cwd: string, deny: readonly strin
 		// .git aninhados (submódulos, repositórios dentro do projeto) entram como só leitura.
 		if (path.basename(f) === ".git") {
 			if (writable) args.push("--ro-bind", f, f);
+		} else if (path.basename(f) === ".workbench") {
+			// Some com o conteúdo: no lugar, uma pasta vazia e só leitura.
+			args.push("--tmpfs", f, "--remount-ro", f);
 		} else args.push("--ro-bind", "/dev/null", f);
 	}
 	args.push(

@@ -2,7 +2,7 @@
 // O "modelo" tenta ações fora do perfil; o host precisa barrar e o sandbox conter.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
@@ -13,7 +13,7 @@ import { beginGuard, endGuard } from "../src/guard.ts";
 import { loadProjectConfig } from "../src/profiles.ts";
 import { matchesAny } from "../src/policy.ts";
 import { ALWAYS_DENY, WRITE_DENY } from "../src/profiles.ts";
-import { sandboxAvailable, wrapCommand } from "../src/sandbox.ts";
+import { buildSandboxArgs, sandboxAvailable, wrapCommand } from "../src/sandbox.ts";
 
 const FAKE_KEY = "sk-ant-api03-" + "FAKE".repeat(10);
 const tmp = mkdtempSync(path.join(os.tmpdir(), "wb-host-test-"));
@@ -131,6 +131,7 @@ test("sandbox workspace-write: bash roda no sandbox sem rede, sem home e sem o .
 				fauxToolCall("bash", { command: "node -e \"fetch('https://example.com').then(()=>console.log('REDE-ABERTA')).catch(()=>console.log('REDE-BLOQUEADA'))\"" }),
 				fauxToolCall("bash", { command: "echo fora > /tmp/../etc/wb-teste 2>/dev/null || echo FS-SO-LEITURA" }),
 				fauxToolCall("bash", { command: "npm test" }),
+				fauxToolCall("bash", { command: "echo WB-ENTRADAS=$(ls -A .workbench | wc -l); touch .workbench/x 2>/dev/null || echo WB-SO-LEITURA" }),
 			],
 			{ stopReason: "toolUse" },
 		),
@@ -149,6 +150,7 @@ test("sandbox workspace-write: bash roda no sandbox sem rede, sem home e sem o .
 	assert.ok(sent.includes("REDE-BLOQUEADA") && !sent.includes("REDE-ABERTA"), "sem rede");
 	assert.ok(sent.includes("FS-SO-LEITURA"), "fora do projeto é só leitura");
 	assert.match(sent, /v\d+\.\d+\.\d+/, "npm test (node --version) roda com o node da nvm");
+	assert.ok(sent.includes("WB-ENTRADAS=0") && sent.includes("WB-SO-LEITURA"), ".workbench aparece vazia e só leitura para o bash");
 	assert.ok(r.changedFiles.includes("saida.txt"));
 	assert.equal(readFileSync(path.join(root, ".env"), "utf8"), "DB_PASSWORD=segredo-do-env\n");
 });
@@ -480,4 +482,91 @@ test("guarda: runId malicioso na foto não sai de .workbench/", () => {
 	loadProjectConfig(root);
 	assert.ok(existsSync(path.join(root, "alvo.json")));
 	assert.ok(!existsSync(path.join(root, ".workbench/run-x.json")));
+});
+
+test("aprovação e ask_user nunca ficam abertas ao mesmo tempo", async () => {
+	const root = makeProject("serial");
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage(
+			[
+				fauxToolCall("ask_user", { question: "qual nome?" }),
+				fauxToolCall("write", { path: "src/a.ts", content: "a\n" }),
+				fauxToolCall("ask_user", { question: "e a cor?" }),
+				fauxToolCall("write", { path: "src/b.ts", content: "b\n" }),
+			],
+			{ stopReason: "toolUse" },
+		),
+		fauxAssistantMessage([fauxText("ok")]),
+	]);
+	let open = 0;
+	let maxOpen = 0;
+	const calls: string[] = [];
+	// Um terminal real (readline) só atende uma pergunta por vez: a segunda nunca resolveria.
+	const prompt = async <T>(label: string, answer: T): Promise<T> => {
+		open++;
+		maxOpen = Math.max(maxOpen, open);
+		calls.push(label);
+		await new Promise((r) => setTimeout(r, 10));
+		open--;
+		return answer;
+	};
+	await runTask({
+		projectDir: root,
+		task: "x",
+		sandbox: "docs-only",
+		modelRuntime,
+		modelOverride: model,
+		auditDir: path.join(tmp, "audit"),
+		ask: (req) => prompt(`ask ${req.path}`, "once" as const),
+		askUser: (q) => prompt(`user ${q}`, "azul"),
+	});
+	assert.equal(calls.length, 4);
+	assert.equal(maxOpen, 1);
+});
+
+test("auditoria em .workbench/runs do projeto, fora do git, com tokens; o agente não lê .workbench", async () => {
+	const root = makeProject("audit");
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage([fauxToolCall("read", { path: "README.md" }), fauxToolCall("read", { path: ".workbench/.gitignore" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxText("Li.")]),
+	]);
+	const r = await runTask({ projectDir: root, task: "leia", sandbox: "read-only", modelRuntime, modelOverride: model });
+
+	assert.equal(path.dirname(r.auditPath), path.join(root, ".workbench/runs"));
+	assert.equal(readFileSync(path.join(root, ".workbench/.gitignore"), "utf8").trim().split("\n").at(-1), "*");
+	const gitStatus = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: root, encoding: "utf8" });
+	assert.doesNotMatch(gitStatus, /\.workbench/, "a auditoria não aparece no git");
+	assert.deepEqual(r.changedFiles, []);
+
+	assert.ok(r.decisions.some((d) => d.target === "README.md" && d.allowed));
+	assert.ok(r.decisions.some((d) => d.target === ".workbench/.gitignore" && !d.allowed), "o agente não lê .workbench");
+
+	const audit = readFileSync(r.auditPath, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+	const usage = audit.filter((e) => e.event === "usage");
+	assert.equal(usage.length, 2, "um evento por resposta do modelo");
+	assert.ok(usage.every((e) => e.total > 0 && e.model));
+	const end = audit.find((e) => e.event === "end");
+	assert.equal(end.usage.responses, 2);
+	assert.equal(end.usage.total, usage.reduce((s, e) => s + e.total, 0));
+	assert.deepEqual(r.usage, end.usage);
+});
+
+test(".workbench que é symlink é recusado", async () => {
+	const root = makeProject("wb-link");
+	const outside = path.join(tmp, "fora-do-projeto");
+	mkdirSync(outside);
+	symlinkSync(outside, path.join(root, ".workbench"));
+	await assert.rejects(runTask({ projectDir: root, task: "x", sandbox: "read-only" }), /não é um diretório \(symlink\?\)/);
+	assert.ok(!existsSync(path.join(outside, ".gitignore")));
+});
+
+test("sandbox mascara .workbench com um mount só, qualquer que seja o número de runs", () => {
+	const root = makeProject("muitos-runs");
+	mkdirSync(path.join(root, ".workbench/runs"), { recursive: true });
+	for (let i = 0; i < 200; i++) writeFileSync(path.join(root, `.workbench/runs/run-${i}.jsonl`), "{}\n");
+	const args = buildSandboxArgs(root, root, ALWAYS_DENY);
+	assert.ok(!args.some((a) => a.includes(".workbench/runs")), "nenhum arquivo da auditoria vira argumento");
+	const real = realpathSync(path.join(root, ".workbench"));
+	const i = args.indexOf("--tmpfs", args.indexOf(real));
+	assert.deepEqual(args.slice(i, i + 4), ["--tmpfs", real, "--remount-ro", real], "uma pasta vazia e só leitura no lugar de .workbench");
 });

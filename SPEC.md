@@ -63,9 +63,10 @@ Tudo fica em arquivos legíveis no próprio projeto:
 docs/workbench/idea.md, brief.md, decisions.md, technical-design.md, plan.md, review.md
 .workbench.json          exceções opcionais: sandbox padrão, globs negados, escrita extra
 .workbench/state.json    aprovações (sha256) e últimas execuções
+.workbench/runs/         auditoria de cada execução (<run>.jsonl), com os tokens usados
 ```
 
-Fora do projeto, em `~/.local/state/workbench/runs/<run>.jsonl`, fica a auditoria de cada execução.
+A pasta `.workbench/` tem um `.gitignore` próprio com `*`, então fica fora do git, e o agente não a lê. O [ADR 0002](docs/adr/0002-projeto-acima-dos-repos.md) leva o projeto para um nível acima dos repositórios.
 
 Não existe manifesto escrito à mão. O escopo vem de três fontes:
 - os sandboxes prontos;
