@@ -66,17 +66,6 @@ export interface RunResult {
 	usage: TokenUsage;
 }
 
-export interface RunResult {
-	runId: string;
-	scope: EffectiveScope;
-	commands: DetectedCommand[];
-	decisions: Decision[];
-	changedFiles: string[];
-	finalText: string;
-	auditPath: string;
-	usage: TokenUsage;
-}
-
 export const DEFAULT_MODEL = "openai-codex/gpt-6-luna";
 // Mesmo conjunto do ThinkingLevel do Pi (pi-agent-core não é dependência direta).
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
