@@ -10,7 +10,7 @@ import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@ear
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { runWorkflow } from "../src/fluxo.ts";
 import { sandboxAvailable } from "../src/sandbox.ts";
-import { approvalStatus, approve, loadState } from "../src/workflows.ts";
+import { approvalStatus, approve, loadState, WORKFLOW_IDS, WORKFLOWS } from "../src/workflows.ts";
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "wb-fluxo-test-"));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -157,4 +157,11 @@ test("review: sandbox com o projeto só leitura, escreve só review.md", { skip:
 	assert.equal(readFileSync(path.join(root, "src/app.js"), "utf8"), "export const x = 1;\n");
 	assert.ok(r.outputWritten);
 	assert.ok(existsSync(path.join(root, "docs/workbench/review.md")));
+});
+
+test("instruções das etapas não usam \"evidência\" (dispara recusa espúria no gpt-6-luna)", () => {
+	for (const id of WORKFLOW_IDS) {
+		const def = WORKFLOWS[id];
+		assert.doesNotMatch([def.goal, ...def.instructions].join("\n"), /evid[êe]nc/i, id);
+	}
 });

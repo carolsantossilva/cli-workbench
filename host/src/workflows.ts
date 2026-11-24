@@ -28,6 +28,9 @@ export interface WorkflowDef {
 	instructions: string[];
 }
 
+// Não use a palavra "evidência" nas instruções: com o gpt-6-luna ela dispara uma recusa
+// espúria ("voting systems or elections infrastructure") em quase toda execução.
+// Medido em 2026-11-24: frase com "evidência" recusou 6/6, a mesma sem ela 0/6.
 export const WORKFLOWS: Record<WorkflowId, WorkflowDef> = {
 	brainstorm: {
 		id: "brainstorm",
@@ -91,8 +94,8 @@ export const WORKFLOWS: Record<WorkflowId, WorkflowDef> = {
 			"Leia o design aprovado e o estado atual do código antes de editar; preserve mudanças existentes.",
 			"O usuário aprovou o design: escolhas marcadas nele como em aberto seguem a recomendação do próprio design (ou a opção mais simples, se não houver), registradas no plano como premissa. Não pare por causa delas.",
 			`Escreva primeiro ${DIR}/plan.md com lotes pequenos em ordem de dependência, cada um com a verificação que prova que funcionou. Se o plano já existir, continue do primeiro lote não concluído.`,
-			"Implemente lote a lote, com teste antes da mudança de comportamento. Rode os testes de verdade e marque no plano cada lote concluído com a evidência.",
-			"Pare se algo contradisser o design: registre no plano a evidência e a decisão necessária.",
+			"Implemente lote a lote, com teste antes da mudança de comportamento. Rode os testes de verdade e marque no plano cada lote concluído com o comando rodado e a saída que mostra que funcionou.",
+			"Pare se algo contradisser o design: registre no plano o que foi observado e a decisão necessária.",
 		],
 	},
 	review: {
@@ -107,7 +110,7 @@ export const WORKFLOWS: Record<WorkflowId, WorkflowDef> = {
 		instructions: [
 			"Veja o que mudou (`git diff`, `git status`) e compare com o design e o plano.",
 			"Rode os testes do projeto; o sandbox desta etapa é só leitura, então nada do projeto pode ser alterado.",
-			`Escreva ${DIR}/review.md com achados acionáveis: gravidade, arquivo, impacto concreto e evidência. Separe defeitos verificados de limitações e premissas. Diga quais testes rodou e o resultado real.`,
+			`Escreva ${DIR}/review.md com achados acionáveis: gravidade, arquivo, impacto concreto e como foi confirmado (comando, saída ou trecho de código). Separe defeitos verificados de limitações e premissas. Diga quais testes rodou e o resultado real.`,
 			"Não altere código.",
 		],
 	},
