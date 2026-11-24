@@ -62,7 +62,7 @@ wb status                   # onde está cada etapa e qual é o próximo passo
 Todos os arquivos ficam em `docs/workbench/`. Cada etapa roda numa sessão nova, então o contexto passa de uma etapa para a outra só pelos arquivos.
 
 - **Entradas:** uma etapa não roda sem as entradas obrigatórias, e o erro diz qual etapa rodar antes.
-- **Aprovação do design:** o `build` só roda com o design aprovado. `wb step approve` grava o sha256 do `design.md` em `.workbench/state.json` (vale colocar `.workbench/` no `.gitignore` do projeto). Se o design mudar depois, a aprovação deixa de valer e o build volta a ser barrado.
+- **Aprovação do design:** o `build` só roda com o design aprovado. `wb step approve` grava o sha256 do `design.md` em `.workbench/state.json`. A pasta `.workbench/` tem um `.gitignore` próprio com `*`, então fica fora do git sem mexer no `.gitignore` do projeto. Se o design mudar depois, a aprovação deixa de valer e o build volta a ser barrado.
 - **Pedido extra:** nas etapas depois do brainstorm, o texto passado vira um pedido extra (ex.: `wb step run build "só o lote 2"`).
 - **Perguntas:** no `brainstorm` e no `grill-me`, o agente usa a ferramenta `ask_user`. Com `--no-input`, ou sem terminal, ele decide com premissas explícitas.
 
@@ -85,7 +85,7 @@ O bash do `workspace-write`:
 - roda com o ambiente limpo.
 
 Em todos os sandboxes vale o seguinte:
-- **Sempre negados:** `.env*`, `*.pem`, `*.key`, chaves SSH, `.npmrc`, `.netrc`, `auth.json` e `credentials*.json`.
+- **Sempre negados:** `.env*`, `*.pem`, `*.key`, chaves SSH, `.npmrc`, `.netrc`, `auth.json`, `credentials*.json` e `.workbench/` (estado e auditoria do wb).
 - **Nunca escritos:** `.git/`, `.workbench/` e `.workbench.json`, nem pelas ferramentas nem pelo bash. O que já existe é montado só leitura no sandbox. O que ainda não existe (um `.workbench.json`, ou um `.git` num projeto sem repositório ou numa subpasta) e aparece durante a execução é movido para `<caminho>.rejected-<run>` (evento `violation`), mesmo se o run terminar com erro ou Ctrl-C. Se o processo morrer de vez, a limpeza acontece no próximo uso do projeto. O `git status` do host roda sem fsmonitor e sem hooks.
 - **Bloqueados:** caminhos fora da raiz, inclusive por symlink.
 
@@ -109,7 +109,7 @@ As chaves antigas em português (`perfil`, `negar`, `perfis`) dão erro com a in
 - **Ferramentas que o sandbox não permite nem são oferecidas ao modelo.** Por exemplo, o `read-only` não recebe `write` nem `bash`.
 - **Segredos redigidos** (chaves Anthropic, OpenAI, GitHub, AWS, Google, Slack e chaves privadas) antes de entrarem no transcript e no payload enviado ao provedor.
 - **Comandos detectados** a partir de `package.json`, `go.mod` e `Cargo.toml`, listados para o modelo.
-- **Auditoria** em `~/.local/state/workbench/runs/<run>.jsonl`. Registra cada decisão e cada envio ao provedor (modelo, bytes e sha256, nunca o conteúdo), além dos arquivos alterados segundo o git.
+- **Auditoria** em `<projeto>/.workbench/runs/<run>.jsonl`, fora do git. Registra cada decisão e cada envio ao provedor (modelo, bytes e sha256, nunca o conteúdo), os tokens de cada resposta do modelo (evento `usage`: entrada, cache, saída, raciocínio e custo, cobrado ou estimado) com o total no evento `end`, além dos arquivos alterados segundo o git. O resumo no fim do `wb run`/`wb step run` mostra o total de tokens. O agente não lê `.workbench/`: trechos de runs anteriores não voltam ao modelo.
 
 ## Testes
 

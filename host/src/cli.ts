@@ -6,7 +6,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { detectCommands } from "./detect.ts";
-import { type ApprovalAnswer, type ApprovalRequest, DEFAULT_MODEL, DEFAULT_THINKING, type Decision, defaultAuditDir, describeScope, type RunResult, runTask, THINKING_LEVELS } from "./host.ts";
+import { type ApprovalAnswer, type ApprovalRequest, DEFAULT_MODEL, DEFAULT_THINKING, type Decision, describeScope, type RunResult, runTask, THINKING_LEVELS, type TokenUsage } from "./host.ts";
 import { loadProjectConfig, resolveScope, SANDBOX_NAMES } from "./profiles.ts";
 import { findDeniedFiles, sandboxAvailable } from "./sandbox.ts";
 import { type Args, parseArgs } from "./args.ts";
@@ -38,7 +38,7 @@ Comandos:
 ${COMMON_OPTIONS}
   -V, --version              mostra a versão
 
-Auditoria: ${defaultAuditDir()}/<run>.jsonl
+Auditoria: <projeto>/.workbench/runs/<run>.jsonl (com os tokens; .workbench/ fica fora do git)
 Sem cor: NO_COLOR=1.`,
 	run: `uso: wb run [opções] <tarefa...>
 
@@ -110,7 +110,16 @@ function summary(r: RunResult) {
 	const blocked = r.decisions.filter((d) => !d.allowed).length;
 	console.error(dim(`\n— ${r.scope.profile.name} · ${r.decisions.length} ações, ${blocked} bloqueadas`));
 	console.error(dim(`— arquivos alterados: ${r.changedFiles.join(", ") || "nenhum (ou projeto sem git)"}`));
+	console.error(dim(`— tokens: ${tokens(r.usage)}`));
 	console.error(dim(`— auditoria: ${r.auditPath}`));
+}
+
+const k = (n: number) => (n < 1000 ? String(n) : `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`);
+
+function tokens(u: TokenUsage): string {
+	const parts = [`entrada ${k(u.input)}`, `cache ${k(u.cacheRead + u.cacheWrite)}`, `saída ${k(u.output)}${u.reasoning ? ` (${k(u.reasoning)} de raciocínio)` : ""}`];
+	const cost = u.cost > 0 ? ` · US$ ${u.cost.toFixed(2)}${u.costFromProvider ? "" : " estimado"}` : "";
+	return `${k(u.total)} em ${u.responses} respostas (${parts.join(", ")})${cost}`;
 }
 
 function asStep(id: string | undefined): StepId {
@@ -175,7 +184,8 @@ function scopeCommand(root: string, args: Args, rest: string[]) {
 	checkUsage("scope", args, rest, { flags: ["sandbox"] });
 	const scope = resolveScope(args.sandbox, loadProjectConfig(root));
 	console.log(describeScope(scope, detectCommands(root)));
-	const masked = findDeniedFiles(root, scope.deny).map((f) => f.slice(root.length + 1));
+	// .workbench/ também é negada, mas é do próprio wb: não entra na lista de sensíveis.
+	const masked = findDeniedFiles(root, scope.deny).map((f) => f.slice(root.length + 1)).filter((f) => !f.startsWith(".workbench/"));
 	console.log(`\nArquivos sensíveis encontrados (negados e mascarados no sandbox): ${masked.join(", ") || "nenhum"}`);
 	console.log(`Sandbox (bwrap): ${sandboxAvailable() ? "disponível" : "NÃO ENCONTRADO"}`);
 }

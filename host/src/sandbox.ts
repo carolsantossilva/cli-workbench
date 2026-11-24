@@ -1,8 +1,9 @@
 // Sandbox do bash via bubblewrap: sem rede, home escondida, só o projeto gravável,
 // arquivos sensíveis do projeto mascarados e ambiente limpo.
-import { existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { workbenchDir } from "./workdir.ts";
 import { matchesAny } from "./policy.ts";
 import { ALWAYS_DENY } from "./profiles.ts";
 
@@ -74,7 +75,7 @@ export function buildSandboxArgs(root: string, cwd: string, deny: readonly strin
 	args.push(writable ? "--bind" : "--ro-bind", realRoot, realRoot);
 	if (writable) {
 		// .workbench precisa existir para ser montado só leitura (senão o bash poderia criá-lo).
-		mkdirSync(path.join(realRoot, ".workbench"), { recursive: true });
+		workbenchDir(realRoot);
 		for (const p of PROTECTED) {
 			const abs = path.join(realRoot, p);
 			if (existsSync(abs)) args.push("--ro-bind", abs, abs);

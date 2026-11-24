@@ -21,6 +21,7 @@ import { type DetectedCommand, detectCommands } from "./detect.ts";
 import { checkPath, matchesAny, redactSecrets } from "./policy.ts";
 import { type EffectiveScope, loadProjectConfig, type SandboxName, resolveScope } from "./profiles.ts";
 import { findDeniedFiles, sandboxAvailable, wrapCommand } from "./sandbox.ts";
+import { auditDirFor } from "./workdir.ts";
 
 export interface Decision {
 	tool: string;
@@ -74,6 +75,46 @@ export interface RunResult {
 	changedFiles: string[];
 	finalText: string;
 	auditPath: string;
+	usage: TokenUsage;
+}
+
+/** Tokens somados das respostas do modelo, como o Pi reporta (input não inclui o cache). */
+export interface TokenUsage {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	/** Parte de output; só alguns provedores informam. */
+	reasoning: number;
+	total: number;
+	/** Custo em dólar: cobrado pelo provedor quando ele informa, senão estimado pelo catálogo do Pi. */
+	cost: number;
+	costFromProvider: boolean;
+	responses: number;
+}
+
+interface PiUsage {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	reasoning?: number;
+	totalTokens: number;
+	cost?: { total: number; totalFromProvider?: boolean };
+}
+
+const emptyUsage = (): TokenUsage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0, cost: 0, costFromProvider: true, responses: 0 });
+
+function addUsage(sum: TokenUsage, u: PiUsage): void {
+	sum.input += u.input;
+	sum.output += u.output;
+	sum.cacheRead += u.cacheRead;
+	sum.cacheWrite += u.cacheWrite;
+	sum.reasoning += u.reasoning ?? 0;
+	sum.total += u.totalTokens;
+	sum.cost += u.cost?.total ?? 0;
+	sum.costFromProvider &&= Boolean(u.cost?.totalFromProvider);
+	sum.responses++;
 }
 
 export const DEFAULT_MODEL = "openai-codex/gpt-6-luna";
@@ -143,10 +184,6 @@ function throwIfModelError(last: unknown): void {
 	if (m?.role === "assistant" && m.stopReason === "error") throw new Error(`erro do modelo: ${m.errorMessage ?? "desconhecido"}`);
 }
 
-export function defaultAuditDir(): string {
-	return path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local", "state"), "workbench", "runs");
-}
-
 function gitChanges(root: string): Set<string> | undefined {
 	try {
 		// Sem fsmonitor e sem hooks: o git do host não executa nada que o projeto configure.
@@ -192,7 +229,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	}
 
 	const runId = `${new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "")}-${randomBytes(3).toString("hex")}`;
-	const auditDir = opts.auditDir ?? defaultAuditDir();
+	const auditDir = opts.auditDir ?? auditDirFor(root);
 	mkdirSync(auditDir, { recursive: true });
 	const auditPath = path.join(auditDir, `${runId}.jsonl`);
 	const audit = (event: string, data: Record<string, unknown>) =>
@@ -385,8 +422,27 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		opts.onText?.(`[workbench: troquei ${rewritten.count} palavra(s) que fazem o modelo recusar; veja "prompt_rewrite" na auditoria]\n`);
 	}
 	audit("thinking", { requested: opts.thinkingLevel ?? DEFAULT_THINKING, effective: session.thinkingLevel });
+	const usage = emptyUsage();
 	const unsubscribe = session.subscribe((event) => {
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") opts.onText?.(event.assistantMessageEvent.delta);
+		if (event.type === "message_end") {
+			const m = event.message as { role?: string; provider?: string; model?: string; stopReason?: string; usage?: PiUsage };
+			if (m.role !== "assistant" || !m.usage) return;
+			addUsage(usage, m.usage);
+			const u = m.usage;
+			audit("usage", {
+				model: `${m.provider}/${m.model}`,
+				stopReason: m.stopReason,
+				input: u.input,
+				output: u.output,
+				cacheRead: u.cacheRead,
+				cacheWrite: u.cacheWrite,
+				reasoning: u.reasoning,
+				total: u.totalTokens,
+				cost: u.cost?.total,
+				costFromProvider: Boolean(u.cost?.totalFromProvider),
+			});
+		}
 	});
 
 	// Ctrl-C/SIGTERM interrompem o modelo, mas deixam o finally limpar o que o run criou.
@@ -425,13 +481,13 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		}
 	}
 	if (interrupted) {
-		audit("end", { interrupted: true });
+		audit("end", { interrupted: true, usage });
 		throw new Error("execução interrompida");
 	}
 
 	const after = gitChanges(root);
 	const changedFiles = before && after ? [...after].filter((f) => !before.has(f)).sort() : [];
-	audit("end", { changedFiles, blocked: decisions.filter((d) => !d.allowed).length });
+	audit("end", { changedFiles, blocked: decisions.filter((d) => !d.allowed).length, usage });
 
-	return { runId, scope, commands, decisions, changedFiles, finalText, auditPath };
+	return { runId, scope, commands, decisions, changedFiles, finalText, auditPath, usage };
 }

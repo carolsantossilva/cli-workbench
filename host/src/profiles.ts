@@ -28,6 +28,8 @@ export const ALWAYS_DENY = [
 	"**/.netrc",
 	"**/auth.json",
 	"**/credentials*.json",
+	// Estado e auditoria do wb: o agente não precisa, e trechos de runs anteriores não devem voltar ao modelo.
+	"**/.workbench/**",
 ];
 
 // Podem ser lidos, nunca escritos pelo agente.

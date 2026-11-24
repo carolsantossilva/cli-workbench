@@ -521,3 +521,39 @@ test("aprovação e ask_user nunca ficam abertas ao mesmo tempo", async () => {
 	assert.equal(calls.length, 4);
 	assert.equal(maxOpen, 1);
 });
+
+test("auditoria em .workbench/runs do projeto, fora do git, com tokens; o agente não lê .workbench", async () => {
+	const root = makeProject("audit");
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage([fauxToolCall("read", { path: "README.md" }), fauxToolCall("read", { path: ".workbench/.gitignore" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxText("Li.")]),
+	]);
+	const r = await runTask({ projectDir: root, task: "leia", sandbox: "read-only", modelRuntime, modelOverride: model });
+
+	assert.equal(path.dirname(r.auditPath), path.join(root, ".workbench/runs"));
+	assert.equal(readFileSync(path.join(root, ".workbench/.gitignore"), "utf8").trim().split("\n").at(-1), "*");
+	const gitStatus = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: root, encoding: "utf8" });
+	assert.doesNotMatch(gitStatus, /\.workbench/, "a auditoria não aparece no git");
+	assert.deepEqual(r.changedFiles, []);
+
+	assert.ok(r.decisions.some((d) => d.target === "README.md" && d.allowed));
+	assert.ok(r.decisions.some((d) => d.target === ".workbench/.gitignore" && !d.allowed), "o agente não lê .workbench");
+
+	const audit = readFileSync(r.auditPath, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+	const usage = audit.filter((e) => e.event === "usage");
+	assert.equal(usage.length, 2, "um evento por resposta do modelo");
+	assert.ok(usage.every((e) => e.total > 0 && e.model));
+	const end = audit.find((e) => e.event === "end");
+	assert.equal(end.usage.responses, 2);
+	assert.equal(end.usage.total, usage.reduce((s, e) => s + e.total, 0));
+	assert.deepEqual(r.usage, end.usage);
+});
+
+test(".workbench que é symlink é recusado", async () => {
+	const root = makeProject("wb-link");
+	const outside = path.join(tmp, "fora-do-projeto");
+	mkdirSync(outside);
+	symlinkSync(outside, path.join(root, ".workbench"));
+	await assert.rejects(runTask({ projectDir: root, task: "x", sandbox: "read-only" }), /não é um diretório \(symlink\?\)/);
+	assert.ok(!existsSync(path.join(outside, ".gitignore")));
+});
