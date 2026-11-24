@@ -65,9 +65,9 @@ const bold = (s: string) => (color ? `\x1b[1m${s}\x1b[0m` : s);
 /**
  * Perguntas no terminal. Uma interface readline por pergunta: entre as perguntas o
  * stdin volta ao modo normal e Ctrl-C vira SIGINT de verdade. Durante uma pergunta, o
- * readline captura o Ctrl-C; ele cancela esta e as próximas perguntas (viram "não") e
- * repassa o sinal (síncrono, direto ao handler do host) para ele interromper o run e
- * limpar o que criou.
+ * readline captura o Ctrl-C; ele cancela esta e as próximas perguntas (aprovações viram
+ * "não"; perguntas do agente ficam sem resposta) e repassa o sinal (síncrono, direto ao
+ * handler do host) para ele interromper o run e limpar o que criou.
  */
 function terminalPrompts(args: Args): { ask?: (req: ApprovalRequest) => Promise<ApprovalAnswer>; askUser?: (question: string) => Promise<string> } {
 	const noInput = args.noInput || ["1", "true"].includes(process.env.WB_NO_INPUT ?? "");
@@ -97,7 +97,8 @@ function terminalPrompts(args: Args): { ask?: (req: ApprovalRequest) => Promise<
 	};
 	const askUser = async (q: string): Promise<string> => {
 		process.stderr.write(`\n${bold("? Pergunta do agente:")} ${safe(q)}\n`);
-		return question("  > ");
+		// Cancelada pelo Ctrl-C: resposta vazia, que o host trata como "sem resposta".
+		return question("  > ").catch(() => "");
 	};
 	return { ask, askUser };
 }
