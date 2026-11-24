@@ -135,6 +135,8 @@ async function main() {
 		case "fluxo": {
 			const interactive = !semPerguntas && process.stdin.isTTY && process.stderr.isTTY;
 			const rl = interactive ? createInterface({ input: process.stdin, output: process.stderr }) : undefined;
+			// Com o readline ativo, Ctrl-C não vira sinal; repassa para o host limpar o run.
+			rl?.on("SIGINT", () => process.kill(process.pid, "SIGINT"));
 			const { ask, askUser } = prompts(rl);
 			const common = { projectDir: root, model: modelo, thinkingLevel: raciocinio, ask, askUser, onText: (t: string) => process.stdout.write(t), onDecision };
 			try {

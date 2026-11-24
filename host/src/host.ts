@@ -2,7 +2,8 @@
 // roda o bash no sandbox, redige segredos e audita o que vai para o modelo.
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, realpathSync, renameSync } from "node:fs";
+import { appendFileSync, mkdirSync, realpathSync } from "node:fs";
+import { beginGuard, endGuard, type Quarantined, recoverInterrupted } from "./guard.ts";
 import os from "node:os";
 import path from "node:path";
 import type { Api, Model } from "@earendil-works/pi-ai";
@@ -19,7 +20,7 @@ import { Type } from "typebox";
 import { type DetectedCommand, detectCommands } from "./detect.ts";
 import { checkPath, matchesAny, redactSecrets } from "./policy.ts";
 import { type EffectiveScope, loadProjectConfig, type ProfileName, resolveScope } from "./profiles.ts";
-import { sandboxAvailable, wrapCommand } from "./sandbox.ts";
+import { findDeniedFiles, sandboxAvailable, wrapCommand } from "./sandbox.ts";
 
 export interface Decision {
 	tool: string;
@@ -107,6 +108,36 @@ export function rewritePrompt(text: string): { text: string; count: number } {
 	return { text, count };
 }
 
+/** Redige segredos em cada string de um valor JSON, sem serializar. */
+export function redactDeep<T>(value: T): { value: T; found: string[] } {
+	const found: string[] = [];
+	const walk = (v: unknown): unknown => {
+		if (typeof v === "string") {
+			const r = redactSecrets(v);
+			found.push(...r.found);
+			return r.text;
+		}
+		if (Array.isArray(v)) return v.map(walk);
+		if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+		return v;
+	};
+	const out = walk(value) as T;
+	return { value: found.length > 0 ? out : value, found };
+}
+
+/** Tira de uma saída de grep/find/ls as linhas de arquivos negados, inclusive linhas de contexto (arquivo-12-texto). */
+export function dropDeniedLines(text: string, root: string, deny: readonly string[]): string {
+	const denied = findDeniedFiles(root, deny).map((f) => path.relative(root, f).split(path.sep).join("/"));
+	const lines = text.split("\n");
+	const kept = lines.filter((raw) => {
+		const line = raw.trim().replace(/^\.\//, "");
+		const file = line.split(":")[0];
+		if (file && matchesAny(file, deny)) return false;
+		return !denied.some((d) => line === d || line.startsWith(`${d}:`) || line.startsWith(`${d}-`));
+	});
+	return kept.length === lines.length ? text : kept.join("\n");
+}
+
 function throwIfModelError(last: unknown): void {
 	const m = last as { role?: string; stopReason?: string; errorMessage?: string } | undefined;
 	if (m?.role === "assistant" && m.stopReason === "error") throw new Error(`erro do modelo: ${m.errorMessage ?? "desconhecido"}`);
@@ -153,6 +184,7 @@ export function describeScope(scope: EffectiveScope, commands: DetectedCommand[]
 
 export async function runTask(opts: RunOptions): Promise<RunResult> {
 	const root = realpathSync(opts.projectDir);
+	const recovered = recoverInterrupted(root);
 	const scope = opts.scope ?? resolveScope(opts.profile, loadProjectConfig(root));
 	const commands = detectCommands(root);
 	if (scope.profile.bash !== "none" && !sandboxAvailable()) {
@@ -248,13 +280,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 			const content = event.content.map((block) => {
 				if (block.type !== "text") return block;
 				let text = block.text;
-				if (["grep", "find", "ls"].includes(event.toolName)) {
-					const kept = text.split("\n").filter((line) => {
-						const file = line.split(":")[0].trim().replace(/^\.\//, "");
-						return !(file && matchesAny(file, scope.deny));
-					});
-					if (kept.length !== text.split("\n").length) text = kept.join("\n");
-				}
+				if (["grep", "find", "ls"].includes(event.toolName)) text = dropDeniedLines(text, root, scope.deny);
 				const r = redactSecrets(text);
 				if (r.found.length > 0) audit("redact", { tool: event.toolName, kinds: r.found });
 				if (r.text === block.text) return block;
@@ -275,18 +301,18 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 				secretsRedacted: found,
 			});
 
+		// A redação percorre cada string (não o JSON serializado): assim os padrões com \b
+		// funcionam depois de quebras de linha e uma chave nunca casa entre duas mensagens.
 		pi.on("context", async (event, ctx) => {
-			const body = JSON.stringify(event.messages);
-			const r = redactSecrets(body);
-			send("context", body, r.found, ctx.model);
-			return r.found.length > 0 ? { messages: JSON.parse(r.text) } : undefined;
+			const r = redactDeep(event.messages);
+			send("context", JSON.stringify(event.messages), r.found, ctx.model);
+			return r.found.length > 0 ? { messages: r.value } : undefined;
 		});
 
 		pi.on("before_provider_request", async (event, ctx) => {
-			const body = JSON.stringify(event.payload ?? null);
-			const r = redactSecrets(body);
-			send("payload", body, r.found, ctx.model);
-			return r.found.length > 0 ? JSON.parse(r.text) : undefined;
+			const r = redactDeep(event.payload ?? null);
+			send("payload", JSON.stringify(event.payload ?? null), r.found, ctx.model);
+			return r.found.length > 0 ? r.value : undefined;
 		});
 	}
 
@@ -331,7 +357,8 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 			: [];
 
 	const before = gitChanges(root);
-	const configExisted = existsSync(path.join(root, ".workbench.json"));
+	const guard = beginGuard(root, runId);
+	for (const q of recovered) audit("violacao", { ...q, acao: "criado num run interrompido; posto de lado" });
 	const rewritten = rewritePrompt(opts.task);
 	const task = rewritten.text;
 	audit("start", { projectDir: root, profile: scope.profile.name, interactive: Boolean(opts.ask), model: `${model.provider}/${model.id}`, task, write: scope.write, commands: commands.map((c) => c.command) });
@@ -358,7 +385,17 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") opts.onText?.(event.assistantMessageEvent.delta);
 	});
 
+	// Ctrl-C/SIGTERM interrompem o modelo, mas deixam o finally limpar o que o run criou.
+	let interrupted = false;
+	const onSignal = () => {
+		interrupted = true;
+		void session.abort();
+	};
+	process.once("SIGINT", onSignal);
+	process.once("SIGTERM", onSignal);
+
 	let finalText = "";
+	let quarantined: Quarantined[] = [];
 	try {
 		await session.prompt(task);
 		throwIfModelError(session.messages.at(-1));
@@ -372,18 +409,22 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 			finalText = session.getLastAssistantText() ?? "";
 		}
 	} finally {
+		process.off("SIGINT", onSignal);
+		process.off("SIGTERM", onSignal);
 		unsubscribe();
 		session.dispose();
+		// .workbench.json e .git criados durante o run (só o bash conseguiria) não valem.
+		quarantined = endGuard(root, guard);
+		for (const q of quarantined) {
+			audit("violacao", { ...q, acao: "criado durante o run; posto de lado" });
+			opts.onText?.(`\n[workbench: ${q.path} criado durante a execução foi ignorado e movido para ${q.movedTo}]\n`);
+		}
+	}
+	if (interrupted) {
+		audit("end", { interrupted: true });
+		throw new Error("execução interrompida");
 	}
 
-	// Se a configuração não existia, ela não pode ser montada só leitura: um .workbench.json
-	// criado durante o run (só o bash conseguiria) é posto de lado, não vale para o próximo.
-	if (!configExisted && existsSync(path.join(root, ".workbench.json"))) {
-		const aside = path.join(root, `.workbench.json.rejeitado-${runId}`);
-		renameSync(path.join(root, ".workbench.json"), aside);
-		audit("violacao", { path: ".workbench.json", acao: `criado durante o run; movido para ${path.basename(aside)}` });
-		opts.onText?.(`\n[workbench: .workbench.json criado durante a execução foi ignorado e movido para ${path.basename(aside)}]\n`);
-	}
 	const after = gitChanges(root);
 	const changedFiles = before && after ? [...after].filter((f) => !before.has(f)).sort() : [];
 	audit("end", { changedFiles, blocked: decisions.filter((d) => !d.allowed).length });

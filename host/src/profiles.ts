@@ -1,5 +1,6 @@
 // Perfis de permissão: cada execução escolhe um, e o projeto só declara exceções.
 import { existsSync, readFileSync } from "node:fs";
+import { recoverInterrupted } from "./guard.ts";
 import path from "node:path";
 
 export type ProfileName = "leitura" | "docs" | "codigo";
@@ -66,6 +67,7 @@ export interface ProjectConfig {
 }
 
 export function loadProjectConfig(root: string): ProjectConfig {
+	recoverInterrupted(root);
 	const file = path.join(root, ".workbench.json");
 	if (!existsSync(file)) return {};
 	const cfg = JSON.parse(readFileSync(file, "utf8")) as ProjectConfig;

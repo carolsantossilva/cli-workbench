@@ -8,7 +8,9 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { rewritePrompt, runTask } from "../src/host.ts";
+import { dropDeniedLines, redactDeep, rewritePrompt, runTask } from "../src/host.ts";
+import { beginGuard } from "../src/guard.ts";
+import { loadProjectConfig } from "../src/profiles.ts";
 import { matchesAny } from "../src/policy.ts";
 import { ALWAYS_DENY, WRITE_DENY } from "../src/profiles.ts";
 import { sandboxAvailable } from "../src/sandbox.ts";
@@ -307,4 +309,57 @@ test("sandbox: bash não altera .git nem a configuração/estado da Workbench, e
 	]);
 	const r2 = await runTask({ projectDir: root, task: "x", profile: "leitura", modelRuntime: m2, modelOverride: model2, auditDir: path.join(tmp, "audit") });
 	assert.ok(r2.decisions.some((d) => d.target.includes(".config/credentials.json") && !d.allowed), "read direto negado");
+});
+
+test("sandbox: num projeto sem .git, o .git criado pelo bash (raiz ou subpasta) é posto de lado", { skip: !sandboxAvailable() && "bwrap ausente" }, async () => {
+	const root = path.join(tmp, "semgit");
+	mkdirSync(path.join(root, "sub"), { recursive: true });
+	writeFileSync(path.join(root, "a.txt"), "a\n");
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage(
+			[fauxToolCall("bash", { command: "git init -q . && git config core.fsmonitor 'touch /tmp/wb-pwned' && git init -q sub && echo FEITO" })],
+			{ stopReason: "toolUse" },
+		),
+		fauxAssistantMessage([fauxText("ok")]),
+	]);
+	const r = await runTask({ projectDir: root, task: "x", profile: "codigo", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	assert.ok(!existsSync(path.join(root, ".git")), ".git da raiz posto de lado");
+	assert.ok(!existsSync(path.join(root, "sub/.git")), ".git da subpasta posto de lado");
+	assert.ok(existsSync(path.join(root, `.git.rejeitado-${r.runId}`)));
+	assert.equal(readFileSync(r.auditPath, "utf8").split('"event":"violacao"').length - 1, 2);
+});
+
+test("guarda: .workbench.json plantado é posto de lado mesmo se o run terminar com erro", { skip: !sandboxAvailable() && "bwrap ausente" }, async () => {
+	const root = makeProject("erro");
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage([fauxToolCall("bash", { command: `echo '{"perfil":"codigo"}' > .workbench.json` })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([], { stopReason: "error", errorMessage: "falha simulada" }),
+	]);
+	await assert.rejects(runTask({ projectDir: root, task: "x", profile: "codigo", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") }), /falha simulada/);
+	assert.ok(!existsSync(path.join(root, ".workbench.json")));
+	assert.equal(loadProjectConfig(root).perfil, undefined);
+});
+
+test("guarda: run interrompido (sem finally) é limpo no próximo uso da configuração", () => {
+	const root = makeProject("interrompido");
+	beginGuard(root, "run-morto");
+	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"codigo"}\n');
+	assert.equal(loadProjectConfig(root).perfil, undefined, "a configuração plantada não vale");
+	assert.ok(existsSync(path.join(root, ".workbench.json.rejeitado-run-morto")));
+	assert.ok(!existsSync(path.join(root, ".workbench/execucao-ativa.json")));
+});
+
+test("redação percorre cada string: segredo depois de quebra de linha e chave partida entre mensagens", () => {
+	const key = "sk-ant-api03-" + "Z".repeat(40);
+	const r = redactDeep([{ content: `linha\n${key}` }, { content: "-----BEGIN RSA PRIVATE KEY-----\nabc" }, { content: "xyz\n-----END RSA PRIVATE KEY-----" }]);
+	assert.ok(!JSON.stringify(r.value).includes(key));
+	assert.equal(r.value.length, 3, "a estrutura continua íntegra");
+	assert.equal(r.value[1].content, "-----BEGIN RSA PRIVATE KEY-----\nabc");
+});
+
+test("filtro de grep tira também linhas de contexto de arquivos negados", () => {
+	const root = makeProject("grepctx");
+	writeFileSync(path.join(root, "server.key"), "segredo\n");
+	const out = ["src/app.ts:1:export const x = 1;", "server.key-1-segredo", "server.key:2:segredo", "./server.key", "src/app.ts-2-fim"].join("\n");
+	assert.equal(dropDeniedLines(out, root, ["**/*.key"]), ["src/app.ts:1:export const x = 1;", "src/app.ts-2-fim"].join("\n"));
 });

@@ -78,7 +78,7 @@ O sandbox do perfil `codigo`:
 
 Em todos os perfis vale o seguinte:
 - **Sempre negados:** `.env*`, `*.pem`, `*.key`, chaves SSH, `.npmrc`, `.netrc`, `auth.json` e `credentials*.json`.
-- **Nunca escritos:** `.git/`, `.workbench/` e `.workbench.json`, nem pelas ferramentas nem pelo bash. Um `.workbench.json` que não existia e aparece durante a execução é movido para `.workbench.json.rejeitado-<run>` (evento `violacao`). O `git status` do host roda sem fsmonitor e sem hooks.
+- **Nunca escritos:** `.git/`, `.workbench/` e `.workbench.json`, nem pelas ferramentas nem pelo bash. O que já existe é montado só leitura no sandbox. O que ainda não existe (um `.workbench.json`, ou um `.git` num projeto sem repositório ou numa subpasta) e aparece durante a execução é movido para `<caminho>.rejeitado-<run>` (evento `violacao`), mesmo se o run terminar com erro ou Ctrl-C. Se o processo morrer de vez, a limpeza acontece no próximo uso do projeto. O `git status` do host roda sem fsmonitor e sem hooks.
 - **Bloqueados:** caminhos fora da raiz, inclusive por symlink.
 
 ### Exceções por projeto (opcional)
@@ -106,7 +106,7 @@ npm run typecheck
 
 ## Limites conhecidos
 
-- A redação de segredos é heurística (regex). Um segredo fora desses padrões, num arquivo permitido, chega ao modelo.
+- A redação de segredos é heurística (regex, aplicada a cada texto do que vai ao provedor). Um segredo fora desses padrões, num arquivo permitido, chega ao modelo.
 - O filtro de `grep`/`find`/`ls` tira linhas de arquivos negados pelo nome, mas o `rg` já pula arquivos ocultos e o `.gitignore` por padrão.
 - "Arquivos alterados" compara o `git status` de antes e de depois. Um arquivo que já estava modificado e foi alterado de novo não aparece.
 - A aprovação vale por arquivo exato, não por pasta ou padrão, e não cobre comandos: no perfil `codigo` o bash é livre dentro do sandbox.
