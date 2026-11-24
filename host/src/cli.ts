@@ -1,54 +1,133 @@
 #!/usr/bin/env node
 // wb: CLI do micro MVP do host da Workbench.
-import { existsSync, realpathSync } from "node:fs";
+// Nomes de comandos, flags e chaves em inglês, seguindo as convenções de CLI (clig.dev,
+// GNU, POSIX); mensagens e ajuda em português.
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
 import { detectCommands } from "./detect.ts";
-import { runWorkflow } from "./fluxo.ts";
-import { type ApprovalAnswer, type ApprovalRequest, DEFAULT_MODEL, DEFAULT_THINKING, THINKING_LEVELS, type Decision, defaultAuditDir, describeScope, type RunResult, runTask } from "./host.ts";
-import { loadProjectConfig, PROFILE_NAMES, type ProfileName, resolveScope } from "./profiles.ts";
+import { type ApprovalAnswer, type ApprovalRequest, DEFAULT_MODEL, DEFAULT_THINKING, type Decision, defaultAuditDir, describeScope, type RunResult, runTask, THINKING_LEVELS, type ThinkingLevel } from "./host.ts";
+import { loadProjectConfig, SANDBOX_NAMES, type SandboxName, resolveScope } from "./profiles.ts";
 import { findDeniedFiles, sandboxAvailable } from "./sandbox.ts";
-import { approvalStatus, approve, loadState, preflight, WORKFLOW_IDS, type WorkflowId, WORKFLOWS } from "./workflows.ts";
+import { runStep } from "./step.ts";
+import { approvalStatus, approve, loadState, preflight, STEP_IDS, type StepId, STEPS } from "./workflows.ts";
 
-const USAGE = `uso:
-  wb run <projeto> [--perfil leitura|docs|codigo] [opções] <tarefa...>
-  wb fluxo <projeto> <etapa> [opções] [texto...]
-  wb aprovar <projeto> <etapa>
-  wb status <projeto>
-  wb escopo <projeto> [--perfil leitura|docs|codigo]
+const COMMON_OPTIONS = `Opções comuns:
+  -C, --project <dir>        projeto (padrão: diretório atual)
+  -h, --help                 mostra esta ajuda`;
 
-Etapas: ${WORKFLOW_IDS.join(" → ")}
+const RUN_OPTIONS = `  -s, --sandbox <nome>       ${SANDBOX_NAMES.join("|")} (padrão: o de .workbench.json, senão read-only)
+  -m, --model <provider/id>  padrão ${DEFAULT_MODEL} (login: npx pi auth login openai-codex)
+      --thinking <nível>     ${THINKING_LEVELS.join("|")} (padrão ${DEFAULT_THINKING})
+      --no-input             nunca pergunta: fora do escopo é negado e o agente decide com premissas
+                             (também com WB_NO_INPUT=1 ou sem terminal interativo)`;
+
+const HELP: Record<string, string> = {
+	main: `uso: wb <comando> [opções]
+
+Comandos:
+  run <tarefa...>              roda uma tarefa no projeto, dentro de um sandbox
+  step run <etapa> [texto...]  roda uma etapa do fluxo: ${STEP_IDS.join(" → ")}
+  step approve <etapa>         aprova a saída de uma etapa (hoje: design) pelo sha256
+  status                       mostra em que etapa o projeto está e o próximo passo
+  scope                        mostra o que o agente pode ler, escrever e rodar
+  help [comando]               ajuda de um comando
+
+${COMMON_OPTIONS}
+  -V, --version              mostra a versão
+
+Auditoria: ${defaultAuditDir()}/<run>.jsonl
+Sem cor: NO_COLOR=1.`,
+	run: `uso: wb run [opções] <tarefa...>
+
+${COMMON_OPTIONS}
+${RUN_OPTIONS}`,
+	step: `uso: wb step run <etapa> [opções] [texto...]
+     wb step approve <etapa> [-C <dir>]
+
+Etapas: ${STEP_IDS.join(" → ")}
   brainstorm recebe a ideia como texto; nas outras, o texto é um pedido extra.
-  build só roda com o design aprovado (wb aprovar <projeto> design) e inalterado.
+  build só roda com o design aprovado (wb step approve design) e inalterado.
   Os arquivos de cada etapa ficam em docs/workbench/.
 
-Opções:
-  --modelo provider/modelo   padrão ${DEFAULT_MODEL} (login: npx pi auth login openai-codex)
-  --raciocinio <nível>       ${THINKING_LEVELS.join("|")} (padrão ${DEFAULT_THINKING})
-  --sem-perguntas            não pergunta nada: fora do escopo é negado e o agente decide com premissas
+${COMMON_OPTIONS}
+  -m, --model, --thinking, --no-input: como em "wb run"`,
+	status: `uso: wb status [-C <dir>]\n\n${COMMON_OPTIONS}`,
+	scope: `uso: wb scope [-C <dir>] [-s <sandbox>]\n\n${COMMON_OPTIONS}\n  -s, --sandbox <nome>       ${SANDBOX_NAMES.join("|")}`,
+};
 
-Perfil padrão do run: o de .workbench.json do projeto, senão "leitura".
-Auditoria: ${defaultAuditDir()}/<run>.jsonl`;
-
-function parse(argv: string[]) {
-	const flags: Record<string, string> = {};
-	const rest: string[] = [];
-	let semPerguntas = false;
-	for (let i = 0; i < argv.length; i++) {
-		const a = argv[i];
-		if (a === "--perfil" || a === "--modelo" || a === "--raciocinio") flags[a.slice(2)] = argv[++i] ?? "";
-		else if (a === "--sem-perguntas") semPerguntas = true;
-		else rest.push(a);
-	}
-	const perfil = flags.perfil as ProfileName | undefined;
-	if (perfil && !PROFILE_NAMES.includes(perfil)) throw new Error(`perfil desconhecido "${perfil}" (use ${PROFILE_NAMES.join(", ")})`);
-	const raciocinio = flags.raciocinio as (typeof THINKING_LEVELS)[number] | undefined;
-	if (raciocinio && !THINKING_LEVELS.includes(raciocinio)) throw new Error(`nível de raciocínio desconhecido "${raciocinio}" (use ${THINKING_LEVELS.join(", ")})`);
-	return { perfil, modelo: flags.modelo, raciocinio, semPerguntas, rest };
+interface Args {
+	project: string;
+	sandbox?: SandboxName;
+	model?: string;
+	thinking?: ThinkingLevel;
+	noInput: boolean;
+	help: boolean;
+	version: boolean;
+	rest: string[];
 }
 
-const dim = (s: string) => (process.stderr.isTTY ? `\x1b[2m${s}\x1b[0m` : s);
-const bold = (s: string) => (process.stderr.isTTY ? `\x1b[1m${s}\x1b[0m` : s);
+// Flags em qualquer posição (clig.dev), "--flag=valor" ou "--flag valor", e "--" encerra as opções (POSIX).
+function parse(argv: string[]): Args {
+	const a: Args = { project: process.cwd(), noInput: false, help: false, version: false, rest: [] };
+	const value = (i: number, flag: string) => {
+		const v = argv[i + 1];
+		if (v === undefined || v.startsWith("-")) throw new Error(`${flag} precisa de um valor`);
+		return v;
+	};
+	for (let i = 0; i < argv.length; i++) {
+		let arg = argv[i];
+		if (arg === "--") {
+			a.rest.push(...argv.slice(i + 1));
+			break;
+		}
+		const eq = arg.startsWith("--") ? arg.indexOf("=") : -1;
+		let inline: string | undefined;
+		if (eq > 0) {
+			inline = arg.slice(eq + 1);
+			arg = arg.slice(0, eq);
+		}
+		const take = (flag: string) => inline ?? value(i++, flag);
+		switch (arg) {
+			case "-C":
+			case "--project":
+				a.project = take(arg);
+				break;
+			case "-s":
+			case "--sandbox":
+				a.sandbox = take(arg) as SandboxName;
+				break;
+			case "-m":
+			case "--model":
+				a.model = take(arg);
+				break;
+			case "--thinking":
+				a.thinking = take(arg) as ThinkingLevel;
+				break;
+			case "--no-input":
+				a.noInput = true;
+				break;
+			case "-h":
+			case "--help":
+				a.help = true;
+				break;
+			case "-V":
+			case "--version":
+				a.version = true;
+				break;
+			default:
+				if (arg.startsWith("-") && arg !== "-") throw new Error(`opção desconhecida: ${arg} (veja wb --help)`);
+				a.rest.push(argv[i]);
+		}
+	}
+	if (a.sandbox && !SANDBOX_NAMES.includes(a.sandbox)) throw new Error(`sandbox desconhecido "${a.sandbox}" (use ${SANDBOX_NAMES.join(", ")})`);
+	if (a.thinking && !THINKING_LEVELS.includes(a.thinking)) throw new Error(`nível de raciocínio desconhecido "${a.thinking}" (use ${THINKING_LEVELS.join(", ")})`);
+	return a;
+}
+
+const color = process.stderr.isTTY && !process.env.NO_COLOR;
+const dim = (s: string) => (color ? `\x1b[2m${s}\x1b[0m` : s);
+const bold = (s: string) => (color ? `\x1b[1m${s}\x1b[0m` : s);
 
 function prompts(rl: Interface | undefined) {
 	if (!rl) return { ask: undefined, askUser: undefined };
@@ -70,7 +149,7 @@ function prompts(rl: Interface | undefined) {
 }
 
 const onDecision = (d: Decision) =>
-	process.stderr.write(dim(`\n[${d.allowed ? (d.by === "usuario" ? "liberado" : "ok") : "BLOQUEADO"}] ${d.tool} ${d.target}${d.allowed ? "" : ` (${d.reason})`}\n`));
+	process.stderr.write(dim(`\n[${d.allowed ? (d.by === "user" ? "liberado" : "ok") : "BLOQUEADO"}] ${d.tool} ${d.target}${d.allowed ? "" : ` (${d.reason})`}\n`));
 
 function summary(r: RunResult) {
 	const blocked = r.decisions.filter((d) => !d.allowed).length;
@@ -79,18 +158,18 @@ function summary(r: RunResult) {
 	console.error(dim(`— auditoria: ${r.auditPath}`));
 }
 
-function asWorkflow(id: string | undefined): WorkflowId {
-	if (!id || !WORKFLOW_IDS.includes(id as WorkflowId)) throw new Error(`etapa desconhecida "${id ?? ""}" (use ${WORKFLOW_IDS.join(", ")})`);
-	return id as WorkflowId;
+function asStep(id: string | undefined): StepId {
+	if (!id || !STEP_IDS.includes(id as StepId)) throw new Error(`etapa desconhecida "${id ?? ""}" (use ${STEP_IDS.join(", ")})`);
+	return id as StepId;
 }
 
 function status(root: string) {
 	const state = loadState(root);
-	const labels: Record<string, string> = { aprovado: "aprovado", "alterado-depois": "ALTERADO depois da aprovação", pendente: "aguardando aprovação", "sem-arquivo": "" };
-	for (const id of WORKFLOW_IDS) {
-		const def = WORKFLOWS[id];
+	const labels: Record<string, string> = { approved: "aprovado", "changed-after": "ALTERADO depois da aprovação", pending: "aguardando aprovação", missing: "" };
+	for (const id of STEP_IDS) {
+		const def = STEPS[id];
 		const has = existsSync(path.join(root, def.output));
-		const run = state.execucoes[id];
+		const run = state.runs[id];
 		const blocker = preflight(root, def);
 		const parts = [has ? `${def.output}` : dim("sem saída")];
 		if (id === "design" && has) parts.push(labels[approvalStatus(root, id, state)]);
@@ -98,25 +177,33 @@ function status(root: string) {
 		if (!has && blocker) parts.push(dim(`(${blocker})`));
 		console.log(`${has ? "●" : "○"} ${id.padEnd(10)} ${parts.filter(Boolean).join(" · ")}`);
 	}
-	const next = WORKFLOW_IDS.find((id) => !existsSync(path.join(root, WORKFLOWS[id].output)));
-	if (approvalStatus(root, "design", state) === "pendente" || approvalStatus(root, "design", state) === "alterado-depois") {
-		console.log(`\nPróximo passo: revise ${WORKFLOWS.design.output} e rode "wb aprovar ${root} design".`);
+	const next = STEP_IDS.find((id) => !existsSync(path.join(root, STEPS[id].output)));
+	const design = approvalStatus(root, "design", state);
+	if (design === "pending" || design === "changed-after") {
+		console.log(`\nPróximo passo: revise ${STEPS.design.output} e rode "wb step approve design".`);
 	} else if (next) {
-		console.log(`\nPróximo passo: wb fluxo ${root} ${next}${next === "brainstorm" ? ' "sua ideia"' : ""}`);
+		console.log(`\nPróximo passo: wb step run ${next}${next === "brainstorm" ? ' "sua ideia"' : ""}`);
 	}
+}
+
+function version(): string {
+	const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
+	return `wb ${pkg.version}`;
 }
 
 async function main() {
 	const [cmd, ...argv] = process.argv.slice(2);
-	if (!cmd || cmd === "-h" || cmd === "--help") return console.log(USAGE);
-	const { perfil, modelo, raciocinio, semPerguntas, rest } = parse(argv);
-	const [projeto, ...args] = rest;
-	if (!projeto) throw new Error(USAGE);
-	const root = realpathSync(projeto);
+	if (!cmd || cmd === "-h" || cmd === "--help") return console.log(HELP.main);
+	if (cmd === "-V" || cmd === "--version") return console.log(version());
+	if (cmd === "help") return console.log(HELP[argv[0] ?? "main"] ?? HELP.main);
+	const args = parse(argv);
+	if (args.version) return console.log(version());
+	if (args.help) return console.log(HELP[cmd] ?? HELP.main);
+	const root = realpathSync(args.project);
 
 	switch (cmd) {
-		case "escopo": {
-			const scope = resolveScope(perfil, loadProjectConfig(root));
+		case "scope": {
+			const scope = resolveScope(args.sandbox, loadProjectConfig(root));
 			console.log(describeScope(scope, detectCommands(root)));
 			const masked = findDeniedFiles(root, scope.deny).map((f) => f.slice(root.length + 1));
 			console.log(`\nArquivos sensíveis encontrados (negados e mascarados no sandbox): ${masked.join(", ") || "nenhum"}`);
@@ -125,30 +212,36 @@ async function main() {
 		}
 		case "status":
 			return status(root);
-		case "aprovar": {
-			const id = asWorkflow(args[0]);
-			const a = approve(root, id);
-			console.log(`${a.file} aprovado (sha256 ${a.sha256.slice(0, 12)}…). Se o arquivo mudar, a aprovação deixa de valer.`);
-			return;
-		}
 		case "run":
-		case "fluxo": {
-			const interactive = !semPerguntas && process.stdin.isTTY && process.stderr.isTTY;
+		case "step": {
+			let sub = "run";
+			let rest = args.rest;
+			if (cmd === "step") {
+				[sub, ...rest] = args.rest;
+				if (sub === "approve") {
+					const a = approve(root, asStep(rest[0]));
+					console.log(`${a.file} aprovado (sha256 ${a.sha256.slice(0, 12)}…). Se o arquivo mudar, a aprovação deixa de valer.`);
+					return;
+				}
+				if (sub !== "run") throw new Error(`subcomando desconhecido "step ${sub ?? ""}" (use step run ou step approve)\n\n${HELP.step}`);
+			}
+			const noInput = args.noInput || ["1", "true"].includes(process.env.WB_NO_INPUT ?? "");
+			const interactive = !noInput && process.stdin.isTTY && process.stderr.isTTY;
 			const rl = interactive ? createInterface({ input: process.stdin, output: process.stderr }) : undefined;
 			// Com o readline ativo, Ctrl-C não vira sinal; repassa para o host limpar o run.
 			rl?.on("SIGINT", () => process.kill(process.pid, "SIGINT"));
 			const { ask, askUser } = prompts(rl);
-			const common = { projectDir: root, model: modelo, thinkingLevel: raciocinio, ask, askUser, onText: (t: string) => process.stdout.write(t), onDecision };
+			const common = { projectDir: root, model: args.model, thinkingLevel: args.thinking, ask, askUser, onText: (t: string) => process.stdout.write(t), onDecision };
 			try {
 				if (cmd === "run") {
-					if (args.length === 0) throw new Error("falta a tarefa");
-					summary(await runTask({ ...common, task: args.join(" "), profile: perfil }));
+					if (rest.length === 0) throw new Error(`falta a tarefa\n\n${HELP.run}`);
+					summary(await runTask({ ...common, task: rest.join(" "), sandbox: args.sandbox }));
 				} else {
-					const id = asWorkflow(args[0]);
-					const r = await runWorkflow({ ...common, id, note: args.slice(1).join(" ") || undefined });
+					const id = asStep(rest[0]);
+					const r = await runStep({ ...common, id, note: rest.slice(1).join(" ") || undefined });
 					summary(r);
 					console.error(r.outputWritten ? `\n${bold(`✓ ${r.output} escrito.`)}` : `\n${bold(`! ${r.output} não foi escrito nesta execução.`)}`);
-					if (id === "design" && r.outputWritten) console.error(`Revise o design e aprove para liberar o build: wb aprovar ${root} design`);
+					if (id === "design" && r.outputWritten) console.error("Revise o design e aprove para liberar o build: wb step approve design");
 				}
 			} finally {
 				rl?.close();
@@ -156,7 +249,7 @@ async function main() {
 			return;
 		}
 		default:
-			throw new Error(`comando desconhecido "${cmd}"\n\n${USAGE}`);
+			throw new Error(`comando desconhecido "${cmd}"\n\n${HELP.main}`);
 	}
 }
 

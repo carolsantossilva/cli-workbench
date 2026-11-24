@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, w
 import path from "node:path";
 
 // Uma foto por run, para que dois runs simultâneos no mesmo projeto não apaguem a do outro.
-const markerPath = (root: string, runId: string) => path.join(root, ".workbench", `execucao-${runId}.json`);
+const markerPath = (root: string, runId: string) => path.join(root, ".workbench", `run-${runId}.json`);
 const CONFIG = ".workbench.json";
 
 interface Snapshot {
@@ -57,8 +57,8 @@ export function endGuard(root: string, snap: Snapshot, marker = markerPath(root,
 	const moved: Quarantined[] = [];
 	const id = SAFE_ID.test(snap.runId) ? snap.runId : "desconhecido";
 	const aside = (rel: string) => {
-		let to = `${rel}.rejeitado-${id}`;
-		for (let n = 2; existsSync(path.join(root, to)); n++) to = `${rel}.rejeitado-${id}-${n}`;
+		let to = `${rel}.rejected-${id}`;
+		for (let n = 2; existsSync(path.join(root, to)); n++) to = `${rel}.rejected-${id}-${n}`;
 		renameSync(path.join(root, rel), path.join(root, to));
 		moved.push({ path: rel, movedTo: to });
 	};
@@ -87,7 +87,7 @@ export function recoverInterrupted(root: string): Quarantined[] {
 	const dir = path.join(root, ".workbench");
 	if (!existsSync(dir)) return [];
 	const moved: Quarantined[] = [];
-	for (const name of readdirSync(dir).filter((n) => /^execucao-.+\.json$/.test(n))) {
+	for (const name of readdirSync(dir).filter((n) => /^(run|execucao)-.+\.json$/.test(n))) {
 		const marker = path.join(dir, name);
 		let snap: Snapshot;
 		try {
@@ -98,7 +98,7 @@ export function recoverInterrupted(root: string): Quarantined[] {
 			continue;
 		}
 		if (snap.pid && snap.pid !== process.pid && alive(snap.pid)) continue;
-		// Apaga o arquivo efetivamente lido (inclui o execucao-ativa.json da versão anterior).
+		// Apaga o arquivo efetivamente lido (inclui os execucao-*.json de versões anteriores).
 		for (const q of endGuard(root, snap, marker)) {
 			moved.push(q);
 			process.stderr.write(`[workbench] o run ${snap.runId} foi interrompido; ${q.path} apareceu depois do início dele e foi movido para ${q.movedTo}. Se foi você que criou, renomeie de volta.\n`);

@@ -85,10 +85,10 @@ export function checkPath(root: string, input: string, mode: "read" | "write", s
 		if (matchesAny(r.rel, scope.writeDeny)) return { allow: false, hard: true, reason: `escrita proibida: ${r.rel}` };
 		return matchesAny(r.rel, scope.write)
 			? r
-			: { allow: false, hard: false, rel: r.rel, reason: `o perfil "${scope.profile.name}" não permite escrever em ${r.rel}` };
+			: { allow: false, hard: false, rel: r.rel, reason: `o sandbox "${scope.profile.name}" não permite escrever em ${r.rel}` };
 	}
 	if (matchesAny(r.rel, [...scope.read, ...scope.write])) return r;
-	return { allow: false, hard: false, rel: r.rel, reason: `o perfil "${scope.profile.name}" não permite ler ${r.rel}` };
+	return { allow: false, hard: false, rel: r.rel, reason: `o sandbox "${scope.profile.name}" não permite ler ${r.rel}` };
 }
 
 const SECRET_PATTERNS: readonly [string, RegExp][] = [

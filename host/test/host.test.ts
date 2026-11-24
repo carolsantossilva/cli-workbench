@@ -57,7 +57,7 @@ function toolOutputs(context: { messages: { role: string; content: unknown }[] }
 		.join("\n");
 }
 
-test("perfil docs: lê o projeto, escreve só Markdown, sem bash, sem segredos", async () => {
+test("sandbox docs-only: lê o projeto, escreve só Markdown, sem bash, sem segredos", async () => {
 	const root = makeProject("docs");
 	let sent = "";
 	const { modelRuntime, model } = await fauxRuntime([
@@ -87,7 +87,7 @@ test("perfil docs: lê o projeto, escreve só Markdown, sem bash, sem segredos",
 		fauxAssistantMessage([fauxText("Escrevi docs/resumo.md.")]),
 	]);
 
-	const r = await runTask({ projectDir: root, task: "documente o projeto", profile: "docs", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const r = await runTask({ projectDir: root, task: "documente o projeto", sandbox: "docs-only", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 	const byTarget = Object.fromEntries(r.decisions.map((d) => [`${d.tool} ${d.target}`, d.allowed]));
 
 	assert.equal(byTarget["read README.md"], true);
@@ -115,7 +115,7 @@ test("perfil docs: lê o projeto, escreve só Markdown, sem bash, sem segredos",
 	assert.equal(audit.at(-1).event, "end");
 });
 
-test("perfil codigo: bash roda no sandbox sem rede, sem home e sem o .env", { skip: !sandboxAvailable() && "bwrap ausente" }, async () => {
+test("sandbox workspace-write: bash roda no sandbox sem rede, sem home e sem o .env", { skip: !sandboxAvailable() && "bwrap ausente" }, async () => {
 	const root = makeProject("codigo");
 	const secretInHome = path.join(os.homedir(), ".wb-host-test-secret");
 	writeFileSync(secretInHome, "segredo-da-home\n");
@@ -140,7 +140,7 @@ test("perfil codigo: bash roda no sandbox sem rede, sem home e sem o .env", { sk
 		},
 	]);
 
-	const r = await runTask({ projectDir: root, task: "rode os testes", profile: "codigo", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const r = await runTask({ projectDir: root, task: "rode os testes", sandbox: "workspace-write", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 
 	assert.ok(r.decisions.every((d) => d.allowed));
 	assert.equal(readFileSync(path.join(root, "saida.txt"), "utf8"), "dentro\n");
@@ -153,13 +153,13 @@ test("perfil codigo: bash roda no sandbox sem rede, sem home e sem o .env", { sk
 	assert.equal(readFileSync(path.join(root, ".env"), "utf8"), "DB_PASSWORD=segredo-do-env\n");
 });
 
-test("perfil leitura: sem ferramentas de escrita nem bash", async () => {
+test("sandbox read-only: sem ferramentas de escrita nem bash", async () => {
 	const root = makeProject("leitura");
 	const { modelRuntime, model } = await fauxRuntime([
 		fauxAssistantMessage([fauxToolCall("write", { path: "README.md", content: "x" }), fauxToolCall("bash", { command: "ls" })], { stopReason: "toolUse" }),
 		fauxAssistantMessage([fauxText("Só li.")]),
 	]);
-	const r = await runTask({ projectDir: root, task: "leia", profile: "leitura", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const r = await runTask({ projectDir: root, task: "leia", sandbox: "read-only", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 	assert.equal(readFileSync(path.join(root, "README.md"), "utf8"), "# Projeto\n");
 	assert.deepEqual(r.changedFiles, []);
 	assert.equal(r.finalText, "Só li.");
@@ -195,7 +195,7 @@ test("aprovação interativa: pergunta só fora do perfil, respeita once/run/den
 	const r = await runTask({
 		projectDir: root,
 		task: "mexa no código",
-		profile: "docs",
+		sandbox: "docs-only",
 		modelRuntime,
 		modelOverride: model,
 		auditDir: path.join(tmp, "audit"),
@@ -213,7 +213,7 @@ test("aprovação interativa: pergunta só fora do perfil, respeita once/run/den
 	assert.ok(!existsSync(path.join(root, "src/negado.ts")));
 	assert.ok(!existsSync(path.join(root, ".workbench.json")));
 	assert.ok(!existsSync(path.join(tmp, "fora.txt")));
-	const byUser = r.decisions.filter((d) => d.by === "usuario").map((d) => `${d.target}:${d.allowed}`);
+	const byUser = r.decisions.filter((d) => d.by === "user").map((d) => `${d.target}:${d.allowed}`);
 	assert.deepEqual(byUser, ["src/app.ts:true", "src/novo.ts:true", "src/negado.ts:false", "src/novo.ts:true", "src/app.ts:false"]);
 	const audit = readFileSync(r.auditPath, "utf8").trim().split("\n").map((l) => JSON.parse(l));
 	assert.equal(audit.filter((e) => e.event === "approval").length, 4);
@@ -225,7 +225,7 @@ test("sem ask, fora do perfil é negado sem perguntar", async () => {
 		fauxAssistantMessage([fauxToolCall("write", { path: "src/app.ts", content: "x" })], { stopReason: "toolUse" }),
 		fauxAssistantMessage([fauxText("ok")]),
 	]);
-	const r = await runTask({ projectDir: root, task: "x", profile: "docs", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const r = await runTask({ projectDir: root, task: "x", sandbox: "docs-only", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 	assert.deepEqual(r.decisions.map((d) => [d.target, d.allowed]), [["src/app.ts", false]]);
 	assert.equal(readFileSync(path.join(root, "src/app.ts"), "utf8"), "export const x = 1;\n");
 });
@@ -237,10 +237,10 @@ test("recusa espúria: pede uma vez para continuar e registra na auditoria", asy
 		fauxAssistantMessage([fauxToolCall("write", { path: "docs/feito.md", content: "ok\n" })], { stopReason: "toolUse" }),
 		fauxAssistantMessage([fauxText("Feito.")]),
 	]);
-	const r = await runTask({ projectDir: root, task: "x", profile: "docs", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const r = await runTask({ projectDir: root, task: "x", sandbox: "docs-only", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 	assert.equal(r.finalText, "Feito.");
 	assert.ok(existsSync(path.join(root, "docs/feito.md")));
-	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"recusa"'));
+	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"refusal"'));
 });
 
 test("reescrita: troca \"evidência\" no pedido antes de enviar e registra na auditoria", async () => {
@@ -256,17 +256,17 @@ test("reescrita: troca \"evidência\" no pedido antes de enviar e registra na au
 			return fauxAssistantMessage([fauxText("ok")]);
 		},
 	]);
-	const r = await runTask({ projectDir: root, task: "liste a evidência do bug", profile: "leitura", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const r = await runTask({ projectDir: root, task: "liste a evidência do bug", sandbox: "read-only", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 	assert.match(sent, /liste a prova do bug/);
 	assert.doesNotMatch(sent, /evidência/);
-	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"reescrita"'));
+	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"prompt_rewrite"'));
 });
 
 test("globs casam arquivos e pastas com ponto (.config/, .ssh/, .devcontainer/)", () => {
 	for (const f of [".env", "app/.env", ".devcontainer/.env", ".config/credentials.json", "a/.ssh/id_rsa", ".docker/certs/x.pem"]) {
 		assert.ok(matchesAny(f, ALWAYS_DENY), f);
 	}
-	for (const f of [".git", ".git/config", ".git/hooks/.x", "sub/.git/config", ".workbench/estado.json", ".workbench.json"]) {
+	for (const f of [".git", ".git/config", ".git/hooks/.x", "sub/.git/config", ".workbench/state.json", ".workbench.json"]) {
 		assert.ok(matchesAny(f, WRITE_DENY), f);
 	}
 	assert.ok(matchesAny("docs/a/b.md", ["docs/**"]) && matchesAny("docs", ["docs/**"]) && !matchesAny("docsx/a", ["docs/**"]));
@@ -284,7 +284,7 @@ test("sandbox: bash não altera .git nem a configuração/estado da Workbench, e
 			[
 				fauxToolCall("bash", { command: "git config core.fsmonitor 'touch /tmp/pwned' 2>&1; echo '[core]' >> .git/config 2>&1; echo FIM-GIT" }),
 				fauxToolCall("bash", { command: "echo '#!/bin/sh' > .git/hooks/pre-commit 2>&1; echo FIM-HOOK" }),
-				fauxToolCall("bash", { command: `echo '{"aprovacoes":{}}' > .workbench/estado.json 2>&1; echo '{"perfil":"codigo"}' > .workbench.json; echo FIM-WB` }),
+				fauxToolCall("bash", { command: `echo '{"approvals":{}}' > .workbench/state.json 2>&1; echo '{"sandbox":"workspace-write"}' > .workbench.json; echo FIM-WB` }),
 				fauxToolCall("bash", { command: "cat .config/credentials.json; echo FIM-CRED" }),
 			],
 			{ stopReason: "toolUse" },
@@ -294,20 +294,20 @@ test("sandbox: bash não altera .git nem a configuração/estado da Workbench, e
 			return fauxAssistantMessage([fauxText("ok")]);
 		},
 	]);
-	const r = await runTask({ projectDir: root, task: "x", profile: "codigo", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const r = await runTask({ projectDir: root, task: "x", sandbox: "workspace-write", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 	assert.ok(sent.includes("FIM-GIT") && sent.includes("FIM-HOOK") && sent.includes("FIM-WB") && sent.includes("FIM-CRED"));
 	assert.equal(readFileSync(path.join(root, ".git/config"), "utf8"), gitConfig, ".git/config intacto");
 	assert.ok(!existsSync(path.join(root, ".git/hooks/pre-commit")), "sem hook plantado");
-	assert.ok(!existsSync(path.join(root, ".workbench/estado.json")), "estado da Workbench intacto");
+	assert.ok(!existsSync(path.join(root, ".workbench/state.json")), "estado da Workbench intacto");
 	assert.ok(!existsSync(path.join(root, ".workbench.json")), ".workbench.json criado no run é posto de lado");
-	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"violacao"'));
+	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"violation"'));
 	assert.ok(!sent.includes("segredo-oculto"), "segredo em pasta oculta mascarado");
 
 	const { modelRuntime: m2, model: model2 } = await fauxRuntime([
 		fauxAssistantMessage([fauxToolCall("read", { path: ".config/credentials.json" })], { stopReason: "toolUse" }),
 		fauxAssistantMessage([fauxText("ok")]),
 	]);
-	const r2 = await runTask({ projectDir: root, task: "x", profile: "leitura", modelRuntime: m2, modelOverride: model2, auditDir: path.join(tmp, "audit") });
+	const r2 = await runTask({ projectDir: root, task: "x", sandbox: "read-only", modelRuntime: m2, modelOverride: model2, auditDir: path.join(tmp, "audit") });
 	assert.ok(r2.decisions.some((d) => d.target.includes(".config/credentials.json") && !d.allowed), "read direto negado");
 });
 
@@ -322,31 +322,31 @@ test("sandbox: num projeto sem .git, o .git criado pelo bash (raiz ou subpasta) 
 		),
 		fauxAssistantMessage([fauxText("ok")]),
 	]);
-	const r = await runTask({ projectDir: root, task: "x", profile: "codigo", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const r = await runTask({ projectDir: root, task: "x", sandbox: "workspace-write", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 	assert.ok(!existsSync(path.join(root, ".git")), ".git da raiz posto de lado");
 	assert.ok(!existsSync(path.join(root, "sub/.git")), ".git da subpasta posto de lado");
-	assert.ok(existsSync(path.join(root, `.git.rejeitado-${r.runId}`)));
-	assert.equal(readFileSync(r.auditPath, "utf8").split('"event":"violacao"').length - 1, 2);
+	assert.ok(existsSync(path.join(root, `.git.rejected-${r.runId}`)));
+	assert.equal(readFileSync(r.auditPath, "utf8").split('"event":"violation"').length - 1, 2);
 });
 
 test("guarda: .workbench.json plantado é posto de lado mesmo se o run terminar com erro", { skip: !sandboxAvailable() && "bwrap ausente" }, async () => {
 	const root = makeProject("erro");
 	const { modelRuntime, model } = await fauxRuntime([
-		fauxAssistantMessage([fauxToolCall("bash", { command: `echo '{"perfil":"codigo"}' > .workbench.json` })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxToolCall("bash", { command: `echo '{"sandbox":"workspace-write"}' > .workbench.json` })], { stopReason: "toolUse" }),
 		fauxAssistantMessage([], { stopReason: "error", errorMessage: "falha simulada" }),
 	]);
-	await assert.rejects(runTask({ projectDir: root, task: "x", profile: "codigo", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") }), /falha simulada/);
+	await assert.rejects(runTask({ projectDir: root, task: "x", sandbox: "workspace-write", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") }), /falha simulada/);
 	assert.ok(!existsSync(path.join(root, ".workbench.json")));
-	assert.equal(loadProjectConfig(root).perfil, undefined);
+	assert.equal(loadProjectConfig(root).sandbox, undefined);
 });
 
 test("guarda: run interrompido (sem finally) é limpo no próximo uso da configuração", () => {
 	const root = makeProject("interrompido");
 	beginGuard(root, "run-morto");
-	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"codigo"}\n');
-	assert.equal(loadProjectConfig(root).perfil, undefined, "a configuração plantada não vale");
-	assert.ok(existsSync(path.join(root, ".workbench.json.rejeitado-run-morto")));
-	assert.ok(!existsSync(path.join(root, ".workbench/execucao-run-morto.json")));
+	writeFileSync(path.join(root, ".workbench.json"), '{"sandbox":"workspace-write"}\n');
+	assert.equal(loadProjectConfig(root).sandbox, undefined, "a configuração plantada não vale");
+	assert.ok(existsSync(path.join(root, ".workbench.json.rejected-run-morto")));
+	assert.ok(!existsSync(path.join(root, ".workbench/run-run-morto.json")));
 });
 
 test("redação percorre cada string: segredo depois de quebra de linha e chave partida entre mensagens", () => {
@@ -379,7 +379,7 @@ test("sandbox: .git aninhado que é arquivo (submódulo) não pode ser redirecio
 			return fauxAssistantMessage([fauxText("ok")]);
 		},
 	]);
-	await runTask({ projectDir: root, task: "x", profile: "codigo", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	await runTask({ projectDir: root, task: "x", sandbox: "workspace-write", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 	assert.ok(sent.includes("FIM"));
 	assert.equal(readFileSync(path.join(root, "sub/.git"), "utf8"), "gitdir: ../.git/modules/sub\n");
 });
@@ -406,7 +406,7 @@ test("symlink quebrado não leva escrita para fora da raiz nem para .workbench",
 	const root = makeProject("symlink-quebrado");
 	const outside = path.join(tmp, "fora-ainda-nao-existe.txt");
 	symlinkSync(outside, path.join(root, "notas.md"));
-	symlinkSync(".workbench/estado.json", path.join(root, "aprova.md"));
+	symlinkSync(".workbench/state.json", path.join(root, "aprova.md"));
 	const { modelRuntime, model } = await fauxRuntime([
 		fauxAssistantMessage(
 			[
@@ -417,9 +417,9 @@ test("symlink quebrado não leva escrita para fora da raiz nem para .workbench",
 		),
 		fauxAssistantMessage([fauxText("ok")]),
 	]);
-	const r = await runTask({ projectDir: root, task: "x", profile: "docs", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const r = await runTask({ projectDir: root, task: "x", sandbox: "docs-only", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 	assert.ok(!existsSync(outside), "nada escrito fora da raiz");
-	assert.ok(!existsSync(path.join(root, ".workbench/estado.json")), "aprovação não forjada");
+	assert.ok(!existsSync(path.join(root, ".workbench/state.json")), "aprovação não forjada");
 	assert.ok(r.decisions.filter((d) => !d.allowed).length >= 2);
 });
 
@@ -427,10 +427,10 @@ test("guarda: não limpa a foto de um run que ainda está vivo", () => {
 	const root = makeProject("vivo");
 	mkdirSync(path.join(root, ".workbench"), { recursive: true });
 	const alivePid = process.ppid;
-	writeFileSync(path.join(root, ".workbench/execucao-vivo.json"), JSON.stringify({ runId: "vivo", pid: alivePid, configExisted: false, gits: [".git"] }));
-	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"docs"}\n');
-	assert.equal(loadProjectConfig(root).perfil, "docs");
-	assert.ok(existsSync(path.join(root, ".workbench/execucao-vivo.json")), "a foto do run vivo continua lá");
+	writeFileSync(path.join(root, ".workbench/run-vivo.json"), JSON.stringify({ runId: "vivo", pid: alivePid, configExisted: false, gits: [".git"] }));
+	writeFileSync(path.join(root, ".workbench.json"), '{"sandbox":"docs-only"}\n');
+	assert.equal(loadProjectConfig(root).sandbox, "docs-only");
+	assert.ok(existsSync(path.join(root, ".workbench/run-vivo.json")), "a foto do run vivo continua lá");
 });
 
 test("auditoria: pedido com segredo é gravado redigido e cada envio registra a redação", async () => {
@@ -442,7 +442,7 @@ test("auditoria: pedido com segredo é gravado redigido e cada envio registra a 
 			return fauxAssistantMessage([fauxText("ok")]);
 		},
 	]);
-	const r = await runTask({ projectDir: root, task: `use a chave ${FAKE_KEY}`, profile: "leitura", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const r = await runTask({ projectDir: root, task: `use a chave ${FAKE_KEY}`, sandbox: "read-only", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
 	const log = readFileSync(r.auditPath, "utf8");
 	assert.ok(!log.includes(FAKE_KEY), "a chave não fica na auditoria");
 	assert.ok(!sentText.includes(FAKE_KEY), "a chave não vai ao modelo");
@@ -455,29 +455,29 @@ test("guarda: dois runs no mesmo projeto têm fotos separadas", () => {
 	const a = beginGuard(root, "run-a");
 	beginGuard(root, "run-b");
 	endGuard(root, a);
-	assert.ok(existsSync(path.join(root, ".workbench/execucao-run-b.json")), "o fim do run A não apaga a foto do B");
-	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"codigo"}\n');
-	assert.equal(loadProjectConfig(root).perfil, undefined, "o B morto ainda é limpo");
+	assert.ok(existsSync(path.join(root, ".workbench/run-run-b.json")), "o fim do run A não apaga a foto do B");
+	writeFileSync(path.join(root, ".workbench.json"), '{"sandbox":"workspace-write"}\n');
+	assert.equal(loadProjectConfig(root).sandbox, undefined, "o B morto ainda é limpo");
 });
 
 test("guarda: foto da versão anterior (execucao-ativa.json) é limpa uma vez só", () => {
 	const root = makeProject("legado");
 	mkdirSync(path.join(root, ".workbench"), { recursive: true });
 	writeFileSync(path.join(root, ".workbench/execucao-ativa.json"), JSON.stringify({ runId: "20261120T000000-abc123", configExisted: false, gits: [".git"] }));
-	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"codigo"}\n');
-	assert.equal(loadProjectConfig(root).perfil, undefined);
+	writeFileSync(path.join(root, ".workbench.json"), '{"sandbox":"workspace-write"}\n');
+	assert.equal(loadProjectConfig(root).sandbox, undefined);
 	assert.ok(!existsSync(path.join(root, ".workbench/execucao-ativa.json")), "a foto antiga foi removida");
-	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"docs"}\n');
-	assert.equal(loadProjectConfig(root).perfil, "docs", "uma configuração criada depois continua valendo");
-	assert.equal(loadProjectConfig(root).perfil, "docs");
+	writeFileSync(path.join(root, ".workbench.json"), '{"sandbox":"docs-only"}\n');
+	assert.equal(loadProjectConfig(root).sandbox, "docs-only", "uma configuração criada depois continua valendo");
+	assert.equal(loadProjectConfig(root).sandbox, "docs-only");
 });
 
 test("guarda: runId malicioso na foto não sai de .workbench/", () => {
 	const root = makeProject("runid");
 	mkdirSync(path.join(root, ".workbench"), { recursive: true });
 	writeFileSync(path.join(root, "alvo.json"), "{}\n");
-	writeFileSync(path.join(root, ".workbench/execucao-x.json"), JSON.stringify({ runId: "/../../alvo", configExisted: true, gits: [".git"] }));
+	writeFileSync(path.join(root, ".workbench/run-x.json"), JSON.stringify({ runId: "/../../alvo", configExisted: true, gits: [".git"] }));
 	loadProjectConfig(root);
 	assert.ok(existsSync(path.join(root, "alvo.json")));
-	assert.ok(!existsSync(path.join(root, ".workbench/execucao-x.json")));
+	assert.ok(!existsSync(path.join(root, ".workbench/run-x.json")));
 });

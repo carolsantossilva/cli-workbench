@@ -1,7 +1,7 @@
 {
   "name": "workbench-host",
   "version": "0.1.0",
-  "description": "Micro MVP: Workbench como host de agente sobre o Pi, com perfis de permissão e sandbox",
+  "description": "Micro MVP: Workbench como host de agente sobre o Pi, com sandboxes de permissão",
   "license": "MIT",
   "type": "module",
   "private": true,

@@ -19,7 +19,7 @@ import {
 import { Type } from "typebox";
 import { type DetectedCommand, detectCommands } from "./detect.ts";
 import { checkPath, matchesAny, redactSecrets } from "./policy.ts";
-import { type EffectiveScope, loadProjectConfig, type ProfileName, resolveScope } from "./profiles.ts";
+import { type EffectiveScope, loadProjectConfig, type SandboxName, resolveScope } from "./profiles.ts";
 import { findDeniedFiles, sandboxAvailable, wrapCommand } from "./sandbox.ts";
 
 export interface Decision {
@@ -27,8 +27,8 @@ export interface Decision {
 	target: string;
 	allowed: boolean;
 	reason?: string;
-	/** Quem decidiu: o perfil, uma regra fixa, ou o usuário ao ser perguntado. */
-	by?: "perfil" | "regra" | "usuario";
+	/** Quem decidiu: o sandbox, uma regra fixa, ou o usuário ao ser perguntado. */
+	by?: "sandbox" | "rule" | "user";
 }
 
 export interface ApprovalRequest {
@@ -44,7 +44,7 @@ export type ApprovalAnswer = "once" | "run" | "deny";
 export interface RunOptions {
 	projectDir: string;
 	task: string;
-	profile?: ProfileName;
+	sandbox?: SandboxName;
 	/** "provider/modelo", ex.: openai-codex/gpt-6-luna */
 	model?: string;
 	/** Esforço de raciocínio (padrão xhigh); o Pi ajusta ao que o modelo suporta. */
@@ -56,11 +56,11 @@ export interface RunOptions {
 	agentDir?: string;
 	onText?: (delta: string) => void;
 	onDecision?: (d: Decision) => void;
-	/** Pergunta ao usuário sobre ações fora do perfil. Sem isso, tudo fora do perfil é negado. */
+	/** Pergunta ao usuário sobre ações fora do sandbox. Sem isso, tudo fora do sandbox é negado. */
 	ask?: (req: ApprovalRequest) => Promise<ApprovalAnswer>;
-	/** Escopo pronto (ex.: de um workflow) no lugar do perfil. */
+	/** Escopo pronto (ex.: de um workflow) no lugar do sandbox. */
 	scope?: EffectiveScope;
-	/** Habilita a ferramenta `perguntar`: o agente faz uma pergunta e recebe a resposta do usuário. */
+	/** Habilita a ferramenta `ask_user`: o agente faz uma pergunta e recebe a resposta do usuário. */
 	askUser?: (question: string) => Promise<string>;
 	/** Quantas vezes pedir para continuar após uma recusa (padrão 1). */
 	refusalRetries?: number;
@@ -167,14 +167,14 @@ function gitChanges(root: string): Set<string> | undefined {
 export function describeScope(scope: EffectiveScope, commands: DetectedCommand[], interactive = false): string {
 	const p = scope.profile;
 	return [
-		`# Workbench: perfil "${p.name}"`,
+		`# Workbench: sandbox "${p.name}"`,
 		p.description,
 		`Leitura: ${scope.read.join(", ")}`,
 		`Escrita: ${scope.write.join(", ") || "nenhuma"}`,
 		`Sempre negado: ${scope.deny.join(", ")}`,
 		p.bash !== "none"
 			? `Comandos: bash disponível num sandbox SEM rede (não dá para instalar dependências nem acessar a internet)${p.bash === "sandbox-ro" ? ", com o projeto SÓ LEITURA" : ""}. Comandos detectados no projeto: ${commands.map((c) => c.command).join(", ") || "nenhum"}.`
-			: "Comandos: nenhum. O bash não está disponível neste perfil.",
+			: "Comandos: nenhum. O bash não está disponível neste sandbox.",
 		interactive
 			? "Se a tarefa exigir ler ou escrever um arquivo fora desse escopo, faça a chamada mesmo assim: o host pergunta ao usuário, que pode liberar ou negar. Arquivos sensíveis, caminhos fora da raiz, .git e a configuração da Workbench nunca são liberados. Se uma chamada for negada, não tente contornar: siga sem ela e diga no resumo final o que faltou."
 			: "Chamadas fora desse escopo são bloqueadas pelo host. Não tente contornar o bloqueio: se precisar de algo bloqueado, diga no resumo final o que faltou e por quê.",
@@ -185,7 +185,7 @@ export function describeScope(scope: EffectiveScope, commands: DetectedCommand[]
 export async function runTask(opts: RunOptions): Promise<RunResult> {
 	const root = realpathSync(opts.projectDir);
 	const recovered = recoverInterrupted(root);
-	const scope = opts.scope ?? resolveScope(opts.profile, loadProjectConfig(root));
+	const scope = opts.scope ?? resolveScope(opts.sandbox, loadProjectConfig(root));
 	const commands = detectCommands(root);
 	if (scope.profile.bash !== "none" && !sandboxAvailable()) {
 		throw new Error(`"${scope.profile.name}" precisa do bubblewrap (bwrap) instalado para rodar comandos em sandbox`);
@@ -199,7 +199,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		appendFileSync(auditPath, JSON.stringify({ ts: new Date().toISOString(), runId, event, ...data }) + "\n");
 
 	const decisions: Decision[] = [];
-	const decide = (tool: string, target: string, allowed: boolean, reason?: string, by: Decision["by"] = "perfil") => {
+	const decide = (tool: string, target: string, allowed: boolean, reason?: string, by: Decision["by"] = "sandbox") => {
 		const d: Decision = { tool, target, allowed, reason, by };
 		decisions.push(d);
 		audit("decision", { ...d });
@@ -222,37 +222,37 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	async function gate(tool: string, input: string, mode: "read" | "write") {
 		const d = checkPath(root, input, mode, scope);
 		if (d.allow) return decide(tool, input, true);
-		if (d.hard || !d.rel) return decide(tool, input, false, d.reason, "regra");
-		if (granted[mode].has(d.rel)) return decide(tool, input, true, "liberado pelo usuário nesta execução", "usuario");
+		if (d.hard || !d.rel) return decide(tool, input, false, d.reason, "rule");
+		if (granted[mode].has(d.rel)) return decide(tool, input, true, "liberado pelo usuário nesta execução", "user");
 		const answer = await askUser({ tool, mode, path: d.rel, reason: d.reason });
 		audit("approval", { tool, mode, path: d.rel, answer });
-		if (answer === "deny") return decide(tool, input, false, `${d.reason} (negado pelo usuário)`, "usuario");
+		if (answer === "deny") return decide(tool, input, false, `${d.reason} (negado pelo usuário)`, "user");
 		if (answer === "run") {
 			granted[mode].add(d.rel);
 			// Quem pode escrever um arquivo também pode lê-lo de volta.
 			if (mode === "write") granted.read.add(d.rel);
 		}
-		return decide(tool, input, true, answer === "run" ? "liberado pelo usuário nesta execução" : "liberado pelo usuário uma vez", "usuario");
+		return decide(tool, input, true, answer === "run" ? "liberado pelo usuário nesta execução" : "liberado pelo usuário uma vez", "user");
 	}
 
 	function extension(pi: ExtensionAPI) {
 		const askUserFn = opts.askUser;
 		if (askUserFn) {
 			pi.registerTool({
-				name: "perguntar",
+				name: "ask_user",
 				label: "Perguntar ao usuário",
 				description: "Faz uma pergunta ao usuário e espera a resposta. Use para decisões que só o usuário pode tomar; uma pergunta por chamada.",
-				parameters: Type.Object({ pergunta: Type.String({ description: "A pergunta, curta e concreta, com uma recomendação se houver" }) }),
+				parameters: Type.Object({ question: Type.String({ description: "A pergunta, curta e concreta, com uma recomendação se houver" }) }),
 				async execute(_id, params) {
-					const resposta = (await askUserFn(params.pergunta)).trim();
-					audit("pergunta", { bytes: Buffer.byteLength(resposta) });
+					const resposta = (await askUserFn(params.question)).trim();
+					audit("question", { bytes: Buffer.byteLength(resposta) });
 					return { content: [{ type: "text", text: resposta || "(sem resposta: decida com uma premissa explícita)" }], details: {} };
 				},
 			});
 		}
 		pi.on("tool_call", async (event) => {
 			const input = event.input as Record<string, unknown>;
-			const target = String(input.path ?? input.command ?? input.pergunta ?? ".");
+			const target = String(input.path ?? input.command ?? input.question ?? ".");
 			switch (event.toolName) {
 				case "read":
 				case "grep":
@@ -262,14 +262,14 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 				case "write":
 				case "edit":
 					return gate(event.toolName, String(input.path ?? ""), "write");
-				case "perguntar":
-					return opts.askUser ? decide("perguntar", target, true) : decide("perguntar", target, false, "sem usuário para responder", "regra");
+				case "ask_user":
+					return opts.askUser ? decide("ask_user", target, true) : decide("ask_user", target, false, "sem usuário para responder", "rule");
 				case "bash":
 					return scope.profile.bash !== "none"
 						? decide("bash", target, true, "sandbox")
-						: decide("bash", target, false, `o perfil "${scope.profile.name}" não roda comandos`, "regra");
+						: decide("bash", target, false, `o sandbox "${scope.profile.name}" não roda comandos`, "rule");
 				default:
-					return decide(event.toolName, target, false, "ferramenta fora do contrato da Workbench", "regra");
+					return decide(event.toolName, target, false, "ferramenta fora do contrato da Workbench", "rule");
 			}
 		});
 
@@ -341,11 +341,11 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	await resourceLoader.reload();
 
 	const tools = ["read", "grep", "find", "ls"];
-	// Com aprovação interativa, até o perfil leitura recebe write/edit: cada escrita vira pergunta.
+	// Com aprovação interativa, até o sandbox read-only recebe write/edit: cada escrita vira pergunta.
 	if (scope.write.length > 0 || opts.ask) tools.push("write", "edit");
 	// `tools` é uma allowlist; o "bash" listado aqui é a definição sandboxed de customTools.
 	if (scope.profile.bash !== "none") tools.push("bash");
-	if (opts.askUser) tools.push("perguntar");
+	if (opts.askUser) tools.push("ask_user");
 	const customTools =
 		scope.profile.bash !== "none"
 			? [
@@ -358,7 +358,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 
 	const before = gitChanges(root);
 	const guard = beginGuard(root, runId);
-	for (const q of recovered) audit("violacao", { ...q, acao: "criado num run interrompido; posto de lado" });
+	for (const q of recovered) audit("violation", { ...q, action: "created in an interrupted run; moved aside" });
 	const rewritten = rewritePrompt(opts.task);
 	const task = rewritten.text;
 	audit("start", { projectDir: root, profile: scope.profile.name, interactive: Boolean(opts.ask), model: `${model.provider}/${model.id}`, task: redactSecrets(task).text, write: scope.write, commands: commands.map((c) => c.command) });
@@ -377,8 +377,8 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	});
 	await session.bindExtensions?.({});
 	if (rewritten.count > 0) {
-		audit("reescrita", { count: rewritten.count, motivo: "palavra que dispara recusa espúria" });
-		opts.onText?.(`[workbench: troquei ${rewritten.count} palavra(s) que fazem o modelo recusar; veja "reescrita" na auditoria]\n`);
+		audit("prompt_rewrite", { count: rewritten.count, reason: "word that triggers spurious refusals" });
+		opts.onText?.(`[workbench: troquei ${rewritten.count} palavra(s) que fazem o modelo recusar; veja "prompt_rewrite" na auditoria]\n`);
 	}
 	audit("thinking", { requested: opts.thinkingLevel ?? DEFAULT_THINKING, effective: session.thinkingLevel });
 	const unsubscribe = session.subscribe((event) => {
@@ -402,7 +402,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		finalText = session.getLastAssistantText() ?? "";
 		// Recusas espúrias acontecem de forma intermitente: uma retomada simples, sem argumentar.
 		for (let retry = 0; retry < (opts.refusalRetries ?? 1) && looksLikeRefusal(finalText); retry++) {
-			audit("recusa", { retry: retry + 1, text: finalText.slice(0, 200) });
+			audit("refusal", { retry: retry + 1, text: finalText.slice(0, 200) });
 			opts.onText?.("\n[o modelo recusou; pedindo para continuar de onde parou]\n");
 			await session.prompt("Continue a tarefa de onde parou.");
 			throwIfModelError(session.messages.at(-1));
@@ -416,7 +416,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		// .workbench.json e .git criados durante o run (só o bash conseguiria) não valem.
 		quarantined = endGuard(root, guard);
 		for (const q of quarantined) {
-			audit("violacao", { ...q, acao: "criado durante o run; posto de lado" });
+			audit("violation", { ...q, action: "created during the run; moved aside" });
 			opts.onText?.(`\n[workbench: ${q.path} criado durante a execução foi ignorado e movido para ${q.movedTo}]\n`);
 		}
 	}

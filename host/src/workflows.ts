@@ -5,14 +5,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ALWAYS_DENY, type EffectiveScope, type ProjectConfig, WRITE_DENY } from "./profiles.ts";
 
-export type WorkflowId = "brainstorm" | "grill-me" | "design" | "build" | "review";
-export const WORKFLOW_IDS: WorkflowId[] = ["brainstorm", "grill-me", "design", "build", "review"];
+export type StepId = "brainstorm" | "grill-me" | "design" | "build" | "review";
+export const STEP_IDS: StepId[] = ["brainstorm", "grill-me", "design", "build", "review"];
 
 export const DIR = "docs/workbench";
 export const IDEA = `${DIR}/idea.md`;
 
-export interface WorkflowDef {
-	id: WorkflowId;
+export interface StepDef {
+	id: StepId;
 	goal: string;
 	/** Precisam existir antes de rodar. */
 	inputs: string[];
@@ -24,14 +24,14 @@ export interface WorkflowDef {
 	/** O agente pode fazer perguntas ao usuário durante a etapa. */
 	asksUser: boolean;
 	/** Etapa cuja saída precisa estar aprovada (e inalterada) antes desta. */
-	requiresApproved?: WorkflowId;
+	requiresApproved?: StepId;
 	instructions: string[];
 }
 
 // Não use a palavra "evidência" nas instruções: com o gpt-6-luna ela dispara uma recusa
 // espúria ("voting systems or elections infrastructure") em quase toda execução.
 // Medido em 2026-11-24: frase com "evidência" recusou 6/6, a mesma sem ela 0/6.
-export const WORKFLOWS: Record<WorkflowId, WorkflowDef> = {
+export const STEPS: Record<StepId, StepDef> = {
 	brainstorm: {
 		id: "brainstorm",
 		goal: "transformar a ideia em entendimento compartilhado: propósito, usuários, resultados, limites",
@@ -43,7 +43,7 @@ export const WORKFLOWS: Record<WorkflowId, WorkflowDef> = {
 		asksUser: true,
 		instructions: [
 			"Leia a ideia e o contexto relevante do projeto.",
-			"Faça poucas perguntas focadas (ferramenta `perguntar`) só quando a resposta mudar o resultado; senão, declare premissas.",
+			"Faça poucas perguntas focadas (ferramenta `ask_user`) só quando a resposta mudar o resultado; senão, declare premissas.",
 			`Escreva ${DIR}/brief.md com: propósito, usuários, resultados esperados, fora do escopo, restrições e perguntas em aberto.`,
 			"Preserve a incerteza em vez de inventar requisitos. Não escreva especificação funcional nem código.",
 		],
@@ -59,7 +59,7 @@ export const WORKFLOWS: Record<WorkflowId, WorkflowDef> = {
 		asksUser: true,
 		instructions: [
 			"Leia o brief e procure termos ambíguos, premissas não testadas, casos extremos e riscos que mudariam escopo ou arquitetura.",
-			"Pergunte ao usuário com a ferramenta `perguntar`: uma pergunta concreta por vez, com uma recomendação quando tiver uma. Faça no máximo 7 perguntas.",
+			"Pergunte ao usuário com a ferramenta `ask_user`: uma pergunta concreta por vez, com uma recomendação quando tiver uma. Faça no máximo 7 perguntas.",
 			`Registre em ${DIR}/decisions.md cada decisão (D1, D2…): pergunta, resposta, opções rejeitadas e consequência. Liste o que ficou em aberto.`,
 			"Não reescreva o brief como se uma premissa estivesse aprovada.",
 		],
@@ -116,10 +116,10 @@ export const WORKFLOWS: Record<WorkflowId, WorkflowDef> = {
 	},
 };
 
-export function workflowScope(def: WorkflowDef, cfg: ProjectConfig): EffectiveScope {
+export function stepScope(def: StepDef, cfg: ProjectConfig): EffectiveScope {
 	return {
 		profile: {
-			name: `fluxo ${def.id}`,
+			name: `step ${def.id}`,
 			description: `Etapa "${def.id}" da Workbench: ${def.goal}.`,
 			read: ["**"],
 			write: def.write,
@@ -127,12 +127,12 @@ export function workflowScope(def: WorkflowDef, cfg: ProjectConfig): EffectiveSc
 		},
 		read: ["**"],
 		write: def.write,
-		deny: [...ALWAYS_DENY, ...(cfg.negar ?? [])],
+		deny: [...ALWAYS_DENY, ...(cfg.deny ?? [])],
 		writeDeny: WRITE_DENY,
 	};
 }
 
-export function workflowPrompt(def: WorkflowDef, present: string[]): string {
+export function stepPrompt(def: StepDef, present: string[]): string {
 	return [
 		`# Etapa ${def.id}`,
 		`Objetivo: ${def.goal}.`,
@@ -143,7 +143,7 @@ export function workflowPrompt(def: WorkflowDef, present: string[]): string {
 	].join("\n");
 }
 
-// ── Estado: aprovações por hash em .workbench/estado.json ──
+// ── Estado: aprovações por hash em .workbench/state.json ──
 
 export interface Approval {
 	file: string;
@@ -151,17 +151,17 @@ export interface Approval {
 	at: string;
 }
 export interface State {
-	aprovacoes: Partial<Record<WorkflowId, Approval>>;
-	execucoes: Partial<Record<WorkflowId, { runId: string; at: string; saida: boolean }>>;
+	approvals: Partial<Record<StepId, Approval>>;
+	runs: Partial<Record<StepId, { runId: string; at: string; outputWritten: boolean }>>;
 }
 
-const statePath = (root: string) => path.join(root, ".workbench", "estado.json");
+const statePath = (root: string) => path.join(root, ".workbench", "state.json");
 
 export function loadState(root: string): State {
 	const p = statePath(root);
-	if (!existsSync(p)) return { aprovacoes: {}, execucoes: {} };
+	if (!existsSync(p)) return { approvals: {}, runs: {} };
 	const s = JSON.parse(readFileSync(p, "utf8")) as Partial<State>;
-	return { aprovacoes: s.aprovacoes ?? {}, execucoes: s.execucoes ?? {} };
+	return { approvals: s.approvals ?? {}, runs: s.runs ?? {} };
 }
 
 export function saveState(root: string, state: State): void {
@@ -174,42 +174,42 @@ export function fileHash(root: string, rel: string): string | undefined {
 	return existsSync(p) ? createHash("sha256").update(readFileSync(p)).digest("hex") : undefined;
 }
 
-export type ApprovalStatus = "aprovado" | "alterado-depois" | "pendente" | "sem-arquivo";
+export type ApprovalStatus = "approved" | "changed-after" | "pending" | "missing";
 
-export function approvalStatus(root: string, id: WorkflowId, state = loadState(root)): ApprovalStatus {
-	const file = WORKFLOWS[id].output;
+export function approvalStatus(root: string, id: StepId, state = loadState(root)): ApprovalStatus {
+	const file = STEPS[id].output;
 	const hash = fileHash(root, file);
-	if (!hash) return "sem-arquivo";
-	const a = state.aprovacoes[id];
-	if (!a) return "pendente";
-	return a.sha256 === hash ? "aprovado" : "alterado-depois";
+	if (!hash) return "missing";
+	const a = state.approvals[id];
+	if (!a) return "pending";
+	return a.sha256 === hash ? "approved" : "changed-after";
 }
 
-export function approve(root: string, id: WorkflowId): Approval {
-	const file = WORKFLOWS[id].output;
+export function approve(root: string, id: StepId): Approval {
+	const file = STEPS[id].output;
 	const sha256 = fileHash(root, file);
-	if (!sha256) throw new Error(`não há ${file} para aprovar; rode "wb fluxo ${id}" antes`);
+	if (!sha256) throw new Error(`não há ${file} para aprovar; rode "wb step run ${id}" antes`);
 	const state = loadState(root);
 	const a = { file, sha256, at: new Date().toISOString() };
-	state.aprovacoes[id] = a;
+	state.approvals[id] = a;
 	saveState(root, state);
 	return a;
 }
 
 /** Erro legível se a etapa não pode rodar agora (entrada faltando ou aprovação pendente). */
-export function preflight(root: string, def: WorkflowDef): string | undefined {
+export function preflight(root: string, def: StepDef): string | undefined {
 	const missing = def.inputs.filter((f) => !existsSync(path.join(root, f)));
 	if (missing.length > 0) {
-		const from = WORKFLOW_IDS.find((w) => missing.includes(WORKFLOWS[w].output));
-		return `falta ${missing.join(", ")}${from ? `; rode "wb fluxo ${from}" antes` : def.id === "brainstorm" ? '; passe a ideia: wb fluxo <projeto> brainstorm "sua ideia"' : ""}`;
+		const from = STEP_IDS.find((w) => missing.includes(STEPS[w].output));
+		return `falta ${missing.join(", ")}${from ? `; rode "wb step run ${from}" antes` : def.id === "brainstorm" ? '; passe a ideia: wb step run brainstorm "sua ideia"' : ""}`;
 	}
 	if (def.requiresApproved) {
 		const st = approvalStatus(root, def.requiresApproved);
-		if (st !== "aprovado") {
-			const file = WORKFLOWS[def.requiresApproved].output;
-			return st === "alterado-depois"
-				? `${file} mudou depois da aprovação; revise e aprove de novo: wb aprovar <projeto> ${def.requiresApproved}`
-				: `${file} ainda não foi aprovado; revise e aprove: wb aprovar <projeto> ${def.requiresApproved}`;
+		if (st !== "approved") {
+			const file = STEPS[def.requiresApproved].output;
+			return st === "changed-after"
+				? `${file} mudou depois da aprovação; revise e aprove de novo: wb step approve ${def.requiresApproved}`
+				: `${file} ainda não foi aprovado; revise e aprove: wb step approve ${def.requiresApproved}`;
 		}
 	}
 	return undefined;

@@ -8,11 +8,11 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { runWorkflow } from "../src/fluxo.ts";
+import { runStep } from "../src/step.ts";
 import { sandboxAvailable } from "../src/sandbox.ts";
-import { approvalStatus, approve, loadState, WORKFLOW_IDS, WORKFLOWS } from "../src/workflows.ts";
+import { approvalStatus, approve, loadState, STEP_IDS, STEPS } from "../src/workflows.ts";
 
-const tmp = mkdtempSync(path.join(os.tmpdir(), "wb-fluxo-test-"));
+const tmp = mkdtempSync(path.join(os.tmpdir(), "wb-step-test-"));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
 function makeProject(name: string): string {
@@ -45,7 +45,7 @@ test("brainstorm: grava a ideia, pergunta ao usuário e só escreve o brief", as
 		(context) => {
 			prompt = JSON.stringify(context);
 			return fauxAssistantMessage(
-				[fauxToolCall("read", { path: "docs/workbench/idea.md" }), fauxToolCall("perguntar", { pergunta: "Quem é o público?" })],
+				[fauxToolCall("read", { path: "docs/workbench/idea.md" }), fauxToolCall("ask_user", { question: "Quem é o público?" })],
 				{ stopReason: "toolUse" },
 			);
 		},
@@ -62,7 +62,7 @@ test("brainstorm: grava a ideia, pergunta ao usuário e só escreve o brief", as
 		fauxAssistantMessage([fauxText("Brief pronto.")]),
 	]);
 
-	const r = await runWorkflow({ ...m, projectDir: root, id: "brainstorm", note: "app de rotina visual", askUser: async (q) => (questions.push(q), "pessoas com TDAH") });
+	const r = await runStep({ ...m, projectDir: root, id: "brainstorm", note: "app de rotina visual", askUser: async (q) => (questions.push(q), "pessoas com TDAH") });
 
 	assert.equal(readFileSync(path.join(root, "docs/workbench/idea.md"), "utf8"), "# Ideia\n\napp de rotina visual\n");
 	assert.match(prompt, /Etapa brainstorm/);
@@ -71,13 +71,13 @@ test("brainstorm: grava a ideia, pergunta ao usuário e só escreve o brief", as
 	assert.match(results, /pessoas com TDAH/);
 	assert.equal(readFileSync(path.join(root, "src/app.js"), "utf8"), "export const x = 1;\n");
 	assert.ok(r.outputWritten);
-	assert.equal(loadState(root).execucoes.brainstorm?.saida, true);
+	assert.equal(loadState(root).runs.brainstorm?.outputWritten, true);
 });
 
 test("grill-me sem brief não roda e aponta a etapa anterior", async () => {
 	const root = makeProject("semBrief");
 	const m = await faux([fauxAssistantMessage([fauxText("nada")])]);
-	await assert.rejects(runWorkflow({ ...m, projectDir: root, id: "grill-me" }), /falta docs\/workbench\/brief\.md; rode "wb fluxo brainstorm" antes/);
+	await assert.rejects(runStep({ ...m, projectDir: root, id: "grill-me" }), /falta docs\/workbench\/brief\.md; rode "wb step run brainstorm" antes/);
 });
 
 test("design: sem a ferramenta perguntar e escrevendo só design.md", async () => {
@@ -87,7 +87,7 @@ test("design: sem a ferramenta perguntar e escrevendo só design.md", async () =
 	let results = "";
 	const m = await faux([
 		fauxAssistantMessage(
-			[fauxToolCall("perguntar", { pergunta: "posso?" }), fauxToolCall("write", { path: "docs/workbench/brief.md", content: "reescrito" })],
+			[fauxToolCall("ask_user", { question: "posso?" }), fauxToolCall("write", { path: "docs/workbench/brief.md", content: "reescrito" })],
 			{ stopReason: "toolUse" },
 		),
 		(context) => {
@@ -97,11 +97,11 @@ test("design: sem a ferramenta perguntar e escrevendo só design.md", async () =
 		fauxAssistantMessage([fauxText("ok")]),
 	]);
 	const asked: string[] = [];
-	const r = await runWorkflow({ ...m, projectDir: root, id: "design", askUser: async (q) => (asked.push(q), "sim") });
+	const r = await runStep({ ...m, projectDir: root, id: "design", askUser: async (q) => (asked.push(q), "sim") });
 	assert.deepEqual(asked, [], "design não pergunta ao usuário");
 	assert.equal(readFileSync(path.join(root, "docs/workbench/brief.md"), "utf8"), "# Brief\n", "design não reescreve o brief");
 	assert.ok(r.outputWritten);
-	assert.equal(approvalStatus(root, "design"), "pendente");
+	assert.equal(approvalStatus(root, "design"), "pending");
 	assert.ok(results.length > 0);
 });
 
@@ -121,13 +121,13 @@ test("build exige o design aprovado e inalterado", { skip: !sandboxAvailable() &
 		fauxAssistantMessage([fauxText("Lote 1 feito.")]),
 	]);
 
-	await assert.rejects(runWorkflow({ ...m, projectDir: root, id: "build" }), /ainda não foi aprovado/);
+	await assert.rejects(runStep({ ...m, projectDir: root, id: "build" }), /ainda não foi aprovado/);
 	approve(root, "design");
 	writeFileSync(path.join(root, "docs/workbench/design.md"), "# Design v2\n");
-	await assert.rejects(runWorkflow({ ...m, projectDir: root, id: "build" }), /mudou depois da aprovação/);
+	await assert.rejects(runStep({ ...m, projectDir: root, id: "build" }), /mudou depois da aprovação/);
 	approve(root, "design");
 
-	const r = await runWorkflow({ ...m, projectDir: root, id: "build" });
+	const r = await runStep({ ...m, projectDir: root, id: "build" });
 	assert.ok(r.outputWritten);
 	assert.equal(readFileSync(path.join(root, "src/app.js"), "utf8"), "export const x = 2;\n");
 	assert.deepEqual(r.changedFiles, ["docs/workbench/plan.md", "src/app.js"]);
@@ -152,7 +152,7 @@ test("review: sandbox com o projeto só leitura, escreve só review.md", { skip:
 			return fauxAssistantMessage([fauxText("ok")]);
 		},
 	]);
-	const r = await runWorkflow({ ...m, projectDir: root, id: "review" });
+	const r = await runStep({ ...m, projectDir: root, id: "review" });
 	assert.match(results, /PROJETO-SO-LEITURA/);
 	assert.equal(readFileSync(path.join(root, "src/app.js"), "utf8"), "export const x = 1;\n");
 	assert.ok(r.outputWritten);
@@ -160,8 +160,8 @@ test("review: sandbox com o projeto só leitura, escreve só review.md", { skip:
 });
 
 test("instruções das etapas não usam \"evidência\" (dispara recusa espúria no gpt-6-luna)", () => {
-	for (const id of WORKFLOW_IDS) {
-		const def = WORKFLOWS[id];
+	for (const id of STEP_IDS) {
+		const def = STEPS[id];
 		assert.doesNotMatch([def.goal, ...def.instructions].join("\n"), /evid[êe]nc/i, id);
 	}
 });
