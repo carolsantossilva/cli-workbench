@@ -12,9 +12,9 @@ import { runTask } from "../src/host.ts";
 import { dropDeniedLines, redactDeep } from "../src/redact.ts";
 import { rewritePrompt } from "../src/refusal.ts";
 import { beginGuard, endGuard } from "../src/guard.ts";
-import { loadProjectConfig } from "../src/profiles.ts";
+import { loadProjectConfig } from "../src/project-config.ts";
 import { matchesAny } from "../src/policy.ts";
-import { ALWAYS_DENY, WRITE_DENY } from "../src/profiles.ts";
+import { ALWAYS_DENY, WRITE_DENY } from "../src/sandbox-profiles.ts";
 import { buildSandboxArgs, sandboxAvailable, wrapCommand } from "../src/sandbox.ts";
 import { saveState } from "../src/workflows.ts";
 

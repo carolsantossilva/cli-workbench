@@ -5,7 +5,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Gate } from "./gate.ts";
 import { redactSecrets } from "./policy.ts";
-import type { EffectiveScope } from "./profiles.ts";
+import type { EffectiveScope } from "./sandbox-profiles.ts";
 import { dropDeniedLines, redactDeep } from "./redact.ts";
 import type { Audit } from "./usage.ts";
 

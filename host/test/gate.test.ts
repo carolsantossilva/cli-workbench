@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { type ApprovalAnswer, type ApprovalRequest, createGate, type Decision } from "../src/gate.ts";
-import { type EffectiveScope, resolveScope } from "../src/profiles.ts";
+import { type EffectiveScope, resolveScope } from "../src/sandbox-profiles.ts";
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "wb-gate-test-"));
 after(() => rmSync(tmp, { recursive: true, force: true }));
