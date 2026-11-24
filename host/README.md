@@ -125,7 +125,7 @@ npm run typecheck
 - "Arquivos alterados" compara o `git status` de antes e de depois. Um arquivo que já estava modificado e foi alterado de novo não aparece.
 - A aprovação vale por arquivo exato, não por pasta ou padrão, e não cobre comandos: no `workspace-write` o bash é livre dentro do sandbox.
 - Ainda não há vários agentes em paralelo nem WhatsApp.
-- Com a conta do ChatGPT, só o `openai-codex/gpt-6-luna` é aceito. Os outros modelos retornam erro, que agora aparece na hora.
+- Na conta do ChatGPT testada (2026-11-24), o Codex só aceita os modelos Luna (`openai-codex/gpt-6-luna` e `openai-codex/gpt-5.6-luna`). Sol, Terra e Astra retornam "not supported when using Codex with a ChatGPT account", e o erro aparece na hora. Isso pode variar com o plano do ChatGPT.
 - O `gpt-6-luna` às vezes recusa uma tarefa comum, com justificativas sem relação com ela (ex.: "voting systems"). O host detecta a recusa e pede uma vez para continuar de onde parou (evento `refusal` na auditoria). Se recusar de novo, rode a etapa outra vez: o `plan.md` guarda o progresso. A palavra "evidência" num prompt dispara essa recusa quase sempre (medido: 6/6 com ela, 0/6 sem ela). O host troca "evidência(s)" por "prova(s)" no seu pedido antes de enviar (evento `prompt_rewrite` na auditoria); as instruções das etapas já não a usam.
 - O sandbox só funciona no Linux (bubblewrap).
 - Nas toolchains da home, as credenciais são procuradas só até 3 níveis de profundidade, e o `~/.cargo/config.toml` continua visível.
