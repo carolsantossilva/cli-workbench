@@ -2,7 +2,7 @@
 // roda o bash no sandbox, redige segredos e audita o que vai para o modelo.
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { appendFileSync, mkdirSync, realpathSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, realpathSync, renameSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Api, Model } from "@earendil-works/pi-ai";
@@ -89,7 +89,8 @@ export function looksLikeRefusal(text: string): boolean {
 // Palavras do texto do usuário que disparam recusa espúria no gpt-6-luna ("voting systems
 // or elections infrastructure"), trocadas antes de enviar. Medido em 2026-11-24, 6 execuções
 // cada: "evidência" recusou 6/6; "prova", "comprovação" e "evidencia" sem acento, 0/6.
-const PROMPT_REWRITES: { from: RegExp; to: string }[] = [{ from: /(?<!\p{L})evidência(s?)(?!\p{L})/giu, to: "prova" }];
+// Palavras dentro de caminhos (docs/evidência.md) ficam como estão.
+const PROMPT_REWRITES: { from: RegExp; to: string }[] = [{ from: /(?<![\p{L}\p{N}/._-])evidência(s?)(?![\p{L}\p{N}/_-]|\.[\p{L}\p{N}])/giu, to: "prova" }];
 
 function matchCase(original: string, replacement: string): string {
 	if (original === original.toUpperCase()) return replacement.toUpperCase();
@@ -117,8 +118,16 @@ export function defaultAuditDir(): string {
 
 function gitChanges(root: string): Set<string> | undefined {
 	try {
-		const out = execFileSync("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { cwd: root, encoding: "utf8" });
-		return new Set(out.split("\0").filter(Boolean).map((l) => l.slice(3)));
+		// Sem fsmonitor e sem hooks: o git do host não executa nada que o projeto configure.
+		const out = execFileSync("git", ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "status", "--porcelain=v1", "-z", "--untracked-files=all"], { cwd: root, encoding: "utf8" });
+		const items = out.split("\0").filter(Boolean);
+		const files = new Set<string>();
+		for (let i = 0; i < items.length; i++) {
+			files.add(items[i].slice(3));
+			// Em renomeação/cópia, o item seguinte é o caminho antigo, sem prefixo de status.
+			if (/^[RC]|^.[RC]/.test(items[i])) files.add(items[++i]);
+		}
+		return files;
 	} catch {
 		return undefined;
 	}
@@ -322,6 +331,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 			: [];
 
 	const before = gitChanges(root);
+	const configExisted = existsSync(path.join(root, ".workbench.json"));
 	const rewritten = rewritePrompt(opts.task);
 	const task = rewritten.text;
 	audit("start", { projectDir: root, profile: scope.profile.name, interactive: Boolean(opts.ask), model: `${model.provider}/${model.id}`, task, write: scope.write, commands: commands.map((c) => c.command) });
@@ -366,6 +376,14 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		session.dispose();
 	}
 
+	// Se a configuração não existia, ela não pode ser montada só leitura: um .workbench.json
+	// criado durante o run (só o bash conseguiria) é posto de lado, não vale para o próximo.
+	if (!configExisted && existsSync(path.join(root, ".workbench.json"))) {
+		const aside = path.join(root, `.workbench.json.rejeitado-${runId}`);
+		renameSync(path.join(root, ".workbench.json"), aside);
+		audit("violacao", { path: ".workbench.json", acao: `criado durante o run; movido para ${path.basename(aside)}` });
+		opts.onText?.(`\n[workbench: .workbench.json criado durante a execução foi ignorado e movido para ${path.basename(aside)}]\n`);
+	}
 	const after = gitChanges(root);
 	const changedFiles = before && after ? [...after].filter((f) => !before.has(f)).sort() : [];
 	audit("end", { changedFiles, blocked: decisions.filter((d) => !d.allowed).length });

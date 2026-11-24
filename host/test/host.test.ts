@@ -9,6 +9,8 @@ import { after, test } from "node:test";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { rewritePrompt, runTask } from "../src/host.ts";
+import { matchesAny } from "../src/policy.ts";
+import { ALWAYS_DENY, WRITE_DENY } from "../src/profiles.ts";
 import { sandboxAvailable } from "../src/sandbox.ts";
 
 const FAKE_KEY = "sk-ant-api03-" + "FAKE".repeat(10);
@@ -242,6 +244,7 @@ test("recusa espúria: pede uma vez para continuar e registra na auditoria", asy
 test("reescrita: troca \"evidência\" no pedido antes de enviar e registra na auditoria", async () => {
 	assert.deepEqual(rewritePrompt("Mostre a evidência e as Evidências. EVIDÊNCIA!"), { text: "Mostre a prova e as Provas. PROVA!", count: 3 });
 	assert.deepEqual(rewritePrompt("isso evidencia o bug; evidenciar; inevidência"), { text: "isso evidencia o bug; evidenciar; inevidência", count: 0 });
+	assert.deepEqual(rewritePrompt("abra docs/evidência.md e evidência_2; falta evidência."), { text: "abra docs/evidência.md e evidência_2; falta prova.", count: 1 });
 
 	const root = makeProject("reescrita");
 	let sent = "";
@@ -255,4 +258,53 @@ test("reescrita: troca \"evidência\" no pedido antes de enviar e registra na au
 	assert.match(sent, /liste a prova do bug/);
 	assert.doesNotMatch(sent, /evidência/);
 	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"reescrita"'));
+});
+
+test("globs casam arquivos e pastas com ponto (.config/, .ssh/, .devcontainer/)", () => {
+	for (const f of [".env", "app/.env", ".devcontainer/.env", ".config/credentials.json", "a/.ssh/id_rsa", ".docker/certs/x.pem"]) {
+		assert.ok(matchesAny(f, ALWAYS_DENY), f);
+	}
+	for (const f of [".git", ".git/config", ".git/hooks/.x", "sub/.git/config", ".workbench/estado.json", ".workbench.json"]) {
+		assert.ok(matchesAny(f, WRITE_DENY), f);
+	}
+	assert.ok(matchesAny("docs/a/b.md", ["docs/**"]) && matchesAny("docs", ["docs/**"]) && !matchesAny("docsx/a", ["docs/**"]));
+	assert.ok(matchesAny(".github/x.md", ["**/*.md"]) && !matchesAny("a.mdx", ["**/*.md"]));
+});
+
+test("sandbox: bash não altera .git nem a configuração/estado da Workbench, e não lê segredos em pastas ocultas", { skip: !sandboxAvailable() && "bwrap ausente" }, async () => {
+	const root = makeProject("fuga");
+	mkdirSync(path.join(root, ".config"), { recursive: true });
+	writeFileSync(path.join(root, ".config/credentials.json"), '{"token":"segredo-oculto"}\n');
+	const gitConfig = readFileSync(path.join(root, ".git/config"), "utf8");
+	let sent = "";
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage(
+			[
+				fauxToolCall("bash", { command: "git config core.fsmonitor 'touch /tmp/pwned' 2>&1; echo '[core]' >> .git/config 2>&1; echo FIM-GIT" }),
+				fauxToolCall("bash", { command: "echo '#!/bin/sh' > .git/hooks/pre-commit 2>&1; echo FIM-HOOK" }),
+				fauxToolCall("bash", { command: `echo '{"aprovacoes":{}}' > .workbench/estado.json 2>&1; echo '{"perfil":"codigo"}' > .workbench.json; echo FIM-WB` }),
+				fauxToolCall("bash", { command: "cat .config/credentials.json; echo FIM-CRED" }),
+			],
+			{ stopReason: "toolUse" },
+		),
+		(context) => {
+			sent = toolOutputs(context);
+			return fauxAssistantMessage([fauxText("ok")]);
+		},
+	]);
+	const r = await runTask({ projectDir: root, task: "x", profile: "codigo", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	assert.ok(sent.includes("FIM-GIT") && sent.includes("FIM-HOOK") && sent.includes("FIM-WB") && sent.includes("FIM-CRED"));
+	assert.equal(readFileSync(path.join(root, ".git/config"), "utf8"), gitConfig, ".git/config intacto");
+	assert.ok(!existsSync(path.join(root, ".git/hooks/pre-commit")), "sem hook plantado");
+	assert.ok(!existsSync(path.join(root, ".workbench/estado.json")), "estado da Workbench intacto");
+	assert.ok(!existsSync(path.join(root, ".workbench.json")), ".workbench.json criado no run é posto de lado");
+	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"violacao"'));
+	assert.ok(!sent.includes("segredo-oculto"), "segredo em pasta oculta mascarado");
+
+	const { modelRuntime: m2, model: model2 } = await fauxRuntime([
+		fauxAssistantMessage([fauxToolCall("read", { path: ".config/credentials.json" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxText("ok")]),
+	]);
+	const r2 = await runTask({ projectDir: root, task: "x", profile: "leitura", modelRuntime: m2, modelOverride: model2, auditDir: path.join(tmp, "audit") });
+	assert.ok(r2.decisions.some((d) => d.target.includes(".config/credentials.json") && !d.allowed), "read direto negado");
 });

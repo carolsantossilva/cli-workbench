@@ -26,8 +26,39 @@ export function resolveInRoot(root: string, input: string): Decision {
 	return { allow: true, rel: rel.split(path.sep).join("/") || "." };
 }
 
+// Glob → RegExp com semântica "dot: true": `*` e `**` também casam nomes que começam
+// com ponto. (path.matchesGlob do Node não tem essa opção e ignora .config/, .ssh/ etc.)
+const globCache = new Map<string, RegExp>();
+export function globToRegExp(glob: string): RegExp {
+	let re = globCache.get(glob);
+	if (re) return re;
+	let src = "";
+	for (let i = 0; i < glob.length; i++) {
+		const c = glob[i];
+		if (c === "*" && glob[i + 1] === "*") {
+			const atStart = i === 0 || glob[i - 1] === "/";
+			const slashAfter = glob[i + 2] === "/";
+			if (atStart && slashAfter) {
+				src += "(?:.*/)?";
+				i += 2;
+			} else if (atStart && i + 2 === glob.length && i > 0) {
+				src = src.slice(0, -1) + "(?:/.*)?";
+				i += 1;
+			} else {
+				src += ".*";
+				i += 1;
+			}
+		} else if (c === "*") src += "[^/]*";
+		else if (c === "?") src += "[^/]";
+		else src += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+	}
+	re = new RegExp(`^${src}$`);
+	globCache.set(glob, re);
+	return re;
+}
+
 export function matchesAny(rel: string, globs: readonly string[]): boolean {
-	return globs.some((g) => g === "**" || rel === g || path.posix.matchesGlob(rel, g));
+	return globs.some((g) => rel === g || globToRegExp(g).test(rel));
 }
 
 export function checkPath(root: string, input: string, mode: "read" | "write", scope: EffectiveScope): Decision {

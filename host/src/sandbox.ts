@@ -1,13 +1,18 @@
 // Sandbox do bash via bubblewrap: sem rede, home escondida, só o projeto gravável,
 // arquivos sensíveis do projeto mascarados e ambiente limpo.
-import { existsSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { matchesAny } from "./policy.ts";
 
 // Ferramentas instaladas na home que os comandos do projeto costumam precisar (só leitura).
 const HOME_TOOLCHAINS = [".nvm", ".volta", ".bun", "go", ".cargo", ".rustup", ".local/share/pnpm"];
-const SKIP_DIRS = new Set(["node_modules", ".git", ".venv", "vendor", "dist", "build", ".next"]);
+// Só dependências instaladas e o próprio .git ficam de fora da busca de arquivos sensíveis.
+const SKIP_DIRS = new Set(["node_modules", ".git"]);
+// Caminhos que o bash nunca pode alterar: com eles, um comando no sandbox poderia
+// plantar hooks/fsmonitor que o git do usuário (ou do host) executa fora do sandbox,
+// mudar a configuração da Workbench ou forjar a aprovação do design.
+export const PROTECTED = [".git", ".workbench", ".workbench.json"];
 
 export function sandboxAvailable(): boolean {
 	return ["/usr/bin/bwrap", "/bin/bwrap", "/usr/local/bin/bwrap"].some((p) => existsSync(p));
@@ -17,8 +22,8 @@ export function quote(s: string): string {
 	return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
-/** Arquivos do projeto que casam com a lista de negação (até 6 níveis, pulando dependências). */
-export function findDeniedFiles(root: string, deny: readonly string[], maxDepth = 6): string[] {
+/** Arquivos do projeto que casam com a lista de negação (até 12 níveis, pulando node_modules e .git). */
+export function findDeniedFiles(root: string, deny: readonly string[], maxDepth = 12): string[] {
 	const out: string[] = [];
 	const walk = (dir: string, rel: string, depth: number) => {
 		if (depth > maxDepth) return;
@@ -32,6 +37,7 @@ export function findDeniedFiles(root: string, deny: readonly string[], maxDepth 
 			const r = rel ? `${rel}/${e.name}` : e.name;
 			if (e.isDirectory()) {
 				if (!SKIP_DIRS.has(e.name)) walk(path.join(dir, e.name), r, depth + 1);
+				else if (e.name === ".git" && rel) out.push(path.join(dir, e.name));
 			} else if (matchesAny(r, deny)) {
 				out.push(path.join(dir, e.name));
 			}
@@ -57,7 +63,20 @@ export function buildSandboxArgs(root: string, cwd: string, deny: readonly strin
 		if (existsSync(p)) args.push("--ro-bind", p, p);
 	}
 	args.push(writable ? "--bind" : "--ro-bind", realRoot, realRoot);
-	for (const f of findDeniedFiles(realRoot, deny)) args.push("--ro-bind", "/dev/null", f);
+	if (writable) {
+		// .workbench precisa existir para ser montado só leitura (senão o bash poderia criá-lo).
+		mkdirSync(path.join(realRoot, ".workbench"), { recursive: true });
+		for (const p of PROTECTED) {
+			const abs = path.join(realRoot, p);
+			if (existsSync(abs)) args.push("--ro-bind", abs, abs);
+		}
+	}
+	for (const f of findDeniedFiles(realRoot, deny)) {
+		// .git aninhados (submódulos, repositórios dentro do projeto) entram como só leitura.
+		if (path.basename(f) === ".git") {
+			if (writable) args.push("--ro-bind", f, f);
+		} else args.push("--ro-bind", "/dev/null", f);
+	}
 	args.push(
 		"--unshare-net",
 		"--unshare-pid",

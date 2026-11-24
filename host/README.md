@@ -72,12 +72,13 @@ O sandbox do perfil `codigo`:
 - não tem rede;
 - esconde a home (só as ferramentas de `~/.nvm`, `~/go`, `~/.cargo` etc. ficam visíveis, em modo leitura);
 - deixa o sistema em modo leitura;
-- mascara os arquivos sensíveis do projeto com `/dev/null`;
+- mascara os arquivos sensíveis do projeto com `/dev/null`, inclusive dentro de pastas ocultas como `.config/`;
+- monta `.git/` (e repositórios aninhados), `.workbench/` e `.workbench.json` só leitura, para o bash não plantar hooks ou `core.fsmonitor` nem forjar a aprovação do design;
 - roda com o ambiente limpo.
 
 Em todos os perfis vale o seguinte:
 - **Sempre negados:** `.env*`, `*.pem`, `*.key`, chaves SSH, `.npmrc`, `.netrc`, `auth.json` e `credentials*.json`.
-- **Nunca escritos:** `.git/`, `.workbench/` e `.workbench.json`.
+- **Nunca escritos:** `.git/`, `.workbench/` e `.workbench.json`, nem pelas ferramentas nem pelo bash. Um `.workbench.json` que não existia e aparece durante a execução é movido para `.workbench.json.rejeitado-<run>` (evento `violacao`). O `git status` do host roda sem fsmonitor e sem hooks.
 - **Bloqueados:** caminhos fora da raiz, inclusive por symlink.
 
 ### Exceções por projeto (opcional)
@@ -113,3 +114,5 @@ npm run typecheck
 - Com a conta do ChatGPT, só o `openai-codex/gpt-6-luna` é aceito. Os outros modelos retornam erro, que agora aparece na hora.
 - O `gpt-6-luna` às vezes recusa uma tarefa comum, com justificativas sem relação com ela (ex.: "voting systems"). O host detecta a recusa e pede uma vez para continuar de onde parou (evento `recusa` na auditoria). Se recusar de novo, rode a etapa outra vez: o `plan.md` guarda o progresso. A palavra "evidência" num prompt dispara essa recusa quase sempre (medido: 6/6 com ela, 0/6 sem ela). O host troca "evidência(s)" por "prova(s)" no seu pedido antes de enviar (evento `reescrita` na auditoria); as instruções das etapas já não a usam.
 - O sandbox só funciona no Linux (bubblewrap).
+- A busca de arquivos sensíveis a mascarar pula `node_modules/` e vai até 12 níveis de profundidade. Ela roda antes de cada comando, então um arquivo sensível criado durante o próprio comando não é mascarado.
+- A troca de "evidência" vale só para o seu pedido, não para arquivos do projeto que o agente lê: um documento com a palavra ainda pode causar recusa no meio da execução.

@@ -2,7 +2,7 @@
 // etapa, executa e registra o resultado no estado do projeto.
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { rewritePrompt, type RunOptions, type RunResult, runTask } from "./host.ts";
+import { type RunOptions, type RunResult, runTask } from "./host.ts";
 import { loadProjectConfig } from "./profiles.ts";
 import {
 	type ApprovalStatus,
@@ -37,7 +37,7 @@ export async function runWorkflow(o: WorkflowRunOptions): Promise<WorkflowRunRes
 
 	if (o.id === "brainstorm" && o.note) {
 		mkdirSync(path.join(root, path.dirname(IDEA)), { recursive: true });
-		writeFileSync(path.join(root, IDEA), `# Ideia\n\n${rewritePrompt(o.note.trim()).text}\n`);
+		writeFileSync(path.join(root, IDEA), `# Ideia\n\n${o.note.trim()}\n`);
 	}
 	const blocker = preflight(root, def);
 	if (blocker) throw new Error(`não dá para rodar "${o.id}": ${blocker}`);
