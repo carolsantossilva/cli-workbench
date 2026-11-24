@@ -15,6 +15,7 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { type DetectedCommand, detectCommands } from "./detect.ts";
 import { checkPath, matchesAny, redactSecrets } from "./policy.ts";
 import { type EffectiveScope, loadProjectConfig, type ProfileName, resolveScope } from "./profiles.ts";
@@ -54,6 +55,12 @@ export interface RunOptions {
 	onDecision?: (d: Decision) => void;
 	/** Pergunta ao usuário sobre ações fora do perfil. Sem isso, tudo fora do perfil é negado. */
 	ask?: (req: ApprovalRequest) => Promise<ApprovalAnswer>;
+	/** Escopo pronto (ex.: de um workflow) no lugar do perfil. */
+	scope?: EffectiveScope;
+	/** Habilita a ferramenta `perguntar`: o agente faz uma pergunta e recebe a resposta do usuário. */
+	askUser?: (question: string) => Promise<string>;
+	/** Quantas vezes pedir para continuar após uma recusa (padrão 1). */
+	refusalRetries?: number;
 }
 
 export interface RunResult {
@@ -67,6 +74,16 @@ export interface RunResult {
 }
 
 export const DEFAULT_MODEL = "openai-codex/gpt-6-luna";
+
+const REFUSAL = /^\s*(n[ãa]o posso ajudar|n[ãa]o posso atender|I can(?:no|')t assist|I can(?:no|')t help|I'm sorry, but I can(?:no|')t)/i;
+export function looksLikeRefusal(text: string): boolean {
+	return text.length < 300 && REFUSAL.test(text);
+}
+
+function throwIfModelError(last: unknown): void {
+	const m = last as { role?: string; stopReason?: string; errorMessage?: string } | undefined;
+	if (m?.role === "assistant" && m.stopReason === "error") throw new Error(`erro do modelo: ${m.errorMessage ?? "desconhecido"}`);
+}
 
 export function defaultAuditDir(): string {
 	return path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local", "state"), "workbench", "runs");
@@ -89,8 +106,8 @@ export function describeScope(scope: EffectiveScope, commands: DetectedCommand[]
 		`Leitura: ${scope.read.join(", ")}`,
 		`Escrita: ${scope.write.join(", ") || "nenhuma"}`,
 		`Sempre negado: ${scope.deny.join(", ")}`,
-		p.bash === "sandbox"
-			? `Comandos: bash disponível num sandbox SEM rede (não dá para instalar dependências nem acessar a internet). Comandos detectados no projeto: ${commands.map((c) => c.command).join(", ") || "nenhum"}.`
+		p.bash !== "none"
+			? `Comandos: bash disponível num sandbox SEM rede (não dá para instalar dependências nem acessar a internet)${p.bash === "sandbox-ro" ? ", com o projeto SÓ LEITURA" : ""}. Comandos detectados no projeto: ${commands.map((c) => c.command).join(", ") || "nenhum"}.`
 			: "Comandos: nenhum. O bash não está disponível neste perfil.",
 		interactive
 			? "Se a tarefa exigir ler ou escrever um arquivo fora desse escopo, faça a chamada mesmo assim: o host pergunta ao usuário, que pode liberar ou negar. Arquivos sensíveis, caminhos fora da raiz, .git e a configuração da Workbench nunca são liberados. Se uma chamada for negada, não tente contornar: siga sem ela e diga no resumo final o que faltou."
@@ -101,10 +118,10 @@ export function describeScope(scope: EffectiveScope, commands: DetectedCommand[]
 
 export async function runTask(opts: RunOptions): Promise<RunResult> {
 	const root = realpathSync(opts.projectDir);
-	const scope = resolveScope(opts.profile, loadProjectConfig(root));
+	const scope = opts.scope ?? resolveScope(opts.profile, loadProjectConfig(root));
 	const commands = detectCommands(root);
-	if (scope.profile.bash === "sandbox" && !sandboxAvailable()) {
-		throw new Error('o perfil "codigo" precisa do bubblewrap (bwrap) instalado para rodar comandos em sandbox');
+	if (scope.profile.bash !== "none" && !sandboxAvailable()) {
+		throw new Error(`"${scope.profile.name}" precisa do bubblewrap (bwrap) instalado para rodar comandos em sandbox`);
 	}
 
 	const runId = `${new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "")}-${randomBytes(3).toString("hex")}`;
@@ -152,9 +169,23 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	}
 
 	function extension(pi: ExtensionAPI) {
+		const askUserFn = opts.askUser;
+		if (askUserFn) {
+			pi.registerTool({
+				name: "perguntar",
+				label: "Perguntar ao usuário",
+				description: "Faz uma pergunta ao usuário e espera a resposta. Use para decisões que só o usuário pode tomar; uma pergunta por chamada.",
+				parameters: Type.Object({ pergunta: Type.String({ description: "A pergunta, curta e concreta, com uma recomendação se houver" }) }),
+				async execute(_id, params) {
+					const resposta = (await askUserFn(params.pergunta)).trim();
+					audit("pergunta", { bytes: Buffer.byteLength(resposta) });
+					return { content: [{ type: "text", text: resposta || "(sem resposta: decida com uma premissa explícita)" }], details: {} };
+				},
+			});
+		}
 		pi.on("tool_call", async (event) => {
 			const input = event.input as Record<string, unknown>;
-			const target = String(input.path ?? input.command ?? ".");
+			const target = String(input.path ?? input.command ?? input.pergunta ?? ".");
 			switch (event.toolName) {
 				case "read":
 				case "grep":
@@ -164,8 +195,10 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 				case "write":
 				case "edit":
 					return gate(event.toolName, String(input.path ?? ""), "write");
+				case "perguntar":
+					return opts.askUser ? decide("perguntar", target, true) : decide("perguntar", target, false, "sem usuário para responder", "regra");
 				case "bash":
-					return scope.profile.bash === "sandbox"
+					return scope.profile.bash !== "none"
 						? decide("bash", target, true, "sandbox")
 						: decide("bash", target, false, `o perfil "${scope.profile.name}" não roda comandos`, "regra");
 				default:
@@ -250,13 +283,14 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	// Com aprovação interativa, até o perfil leitura recebe write/edit: cada escrita vira pergunta.
 	if (scope.write.length > 0 || opts.ask) tools.push("write", "edit");
 	// `tools` é uma allowlist; o "bash" listado aqui é a definição sandboxed de customTools.
-	if (scope.profile.bash === "sandbox") tools.push("bash");
+	if (scope.profile.bash !== "none") tools.push("bash");
+	if (opts.askUser) tools.push("perguntar");
 	const customTools =
-		scope.profile.bash === "sandbox"
+		scope.profile.bash !== "none"
 			? [
 					createBashToolDefinition(root, {
 						exposeSessionEnvironment: false,
-						spawnHook: (c) => ({ ...c, command: wrapCommand(c.command, root, c.cwd, scope.deny) }),
+						spawnHook: (c) => ({ ...c, command: wrapCommand(c.command, root, c.cwd, scope.deny, scope.profile.bash === "sandbox") }),
 					}),
 				]
 			: [];
@@ -283,7 +317,16 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	let finalText = "";
 	try {
 		await session.prompt(opts.task);
+		throwIfModelError(session.messages.at(-1));
 		finalText = session.getLastAssistantText() ?? "";
+		// Recusas espúrias acontecem de forma intermitente: uma retomada simples, sem argumentar.
+		for (let retry = 0; retry < (opts.refusalRetries ?? 1) && looksLikeRefusal(finalText); retry++) {
+			audit("recusa", { retry: retry + 1, text: finalText.slice(0, 200) });
+			opts.onText?.("\n[o modelo recusou; pedindo para continuar de onde parou]\n");
+			await session.prompt("Continue a tarefa de onde parou.");
+			throwIfModelError(session.messages.at(-1));
+			finalText = session.getLastAssistantText() ?? "";
+		}
 	} finally {
 		unsubscribe();
 		session.dispose();

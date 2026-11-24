@@ -5,12 +5,13 @@ import path from "node:path";
 export type ProfileName = "leitura" | "docs" | "codigo";
 
 export interface Profile {
-	name: ProfileName;
+	/** Um perfil pronto ou "fluxo <etapa>". */
+	name: string;
 	description: string;
 	read: string[];
 	write: string[];
-	/** none: sem bash. sandbox: bash livre dentro do bwrap, sem rede e sem a home. */
-	bash: "none" | "sandbox";
+	/** none: sem bash. sandbox: bash livre no bwrap, sem rede e sem a home. sandbox-ro: idem, com o projeto só leitura. */
+	bash: "none" | "sandbox" | "sandbox-ro";
 }
 
 // Nunca lidos nem escritos, em qualquer perfil.

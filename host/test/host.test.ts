@@ -225,3 +225,16 @@ test("sem ask, fora do perfil é negado sem perguntar", async () => {
 	assert.deepEqual(r.decisions.map((d) => [d.target, d.allowed]), [["src/app.ts", false]]);
 	assert.equal(readFileSync(path.join(root, "src/app.ts"), "utf8"), "export const x = 1;\n");
 });
+
+test("recusa espúria: pede uma vez para continuar e registra na auditoria", async () => {
+	const root = makeProject("recusa");
+	const { modelRuntime, model } = await fauxRuntime([
+		fauxAssistantMessage([fauxText("Não posso ajudar com esta solicitação.")]),
+		fauxAssistantMessage([fauxToolCall("write", { path: "docs/feito.md", content: "ok\n" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxText("Feito.")]),
+	]);
+	const r = await runTask({ projectDir: root, task: "x", profile: "docs", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	assert.equal(r.finalText, "Feito.");
+	assert.ok(existsSync(path.join(root, "docs/feito.md")));
+	assert.ok(readFileSync(r.auditPath, "utf8").includes('"event":"recusa"'));
+});

@@ -33,6 +33,33 @@ Quando o agente tenta ler ou escrever um arquivo fora do perfil, a Workbench per
 - Com a aprovação ligada, até o perfil `leitura` recebe `write`/`edit`, e cada escrita vira pergunta. O bash continua só no perfil `codigo`.
 - Cada resposta fica registrada na auditoria (evento `approval`).
 
+## Workflows
+
+```sh
+node src/cli.ts fluxo ~/meu-projeto brainstorm "uma CLI para guardar tarefas em JSON"
+node src/cli.ts fluxo ~/meu-projeto grill-me
+node src/cli.ts fluxo ~/meu-projeto design
+node src/cli.ts aprovar ~/meu-projeto design      # depois de revisar o design
+node src/cli.ts fluxo ~/meu-projeto build
+node src/cli.ts fluxo ~/meu-projeto review
+node src/cli.ts status ~/meu-projeto              # onde está cada etapa e qual é o próximo passo
+```
+
+| Etapa | Lê | Escreve | Comandos | Pergunta ao usuário |
+|---|---|---|---|---|
+| `brainstorm` | `idea.md` (gravado a partir do texto passado) e o projeto | `brief.md` | — | sim |
+| `grill-me` | `brief.md` | `decisions.md` | — | sim |
+| `design` | `brief.md`, `decisions.md` e o projeto | `design.md` | — | não |
+| `build` | `design.md` **aprovado** | `plan.md` e o projeto | sandbox | não |
+| `review` | `design.md`, `plan.md` e o projeto | `review.md` | sandbox **só leitura** | não |
+
+Todos os arquivos ficam em `docs/workbench/`. Cada etapa roda numa sessão nova, então o contexto passa de uma etapa para a outra só pelos arquivos.
+
+- **Entradas:** uma etapa não roda sem as entradas obrigatórias, e o erro diz qual etapa rodar antes.
+- **Aprovação do design:** o `build` só roda com o design aprovado. `wb aprovar` grava o sha256 do `design.md` em `.workbench/estado.json` (vale colocar `.workbench/` no `.gitignore` do projeto). Se o design mudar depois, a aprovação deixa de valer e o build volta a ser barrado.
+- **Pedido extra:** nas etapas depois do brainstorm, o texto passado vira um pedido extra (ex.: `fluxo build "só o lote 2"`).
+- **Perguntas:** no `brainstorm` e no `grill-me`, o agente usa a ferramenta `perguntar`. Com `--sem-perguntas`, ou sem terminal, ele decide com premissas explícitas.
+
 ## Perfis
 
 | Perfil | Lê | Escreve | Comandos |
@@ -82,5 +109,7 @@ npm run typecheck
 - O filtro de `grep`/`find`/`ls` tira linhas de arquivos negados pelo nome, mas o `rg` já pula arquivos ocultos e o `.gitignore` por padrão.
 - "Arquivos alterados" compara o `git status` de antes e de depois. Um arquivo que já estava modificado e foi alterado de novo não aparece.
 - A aprovação vale por arquivo exato, não por pasta ou padrão, e não cobre comandos: no perfil `codigo` o bash é livre dentro do sandbox.
-- Ainda não há workflows (brainstorm, design, build…), vários agentes nem WhatsApp.
+- Ainda não há vários agentes em paralelo nem WhatsApp.
+- Com a conta do ChatGPT, só o `openai-codex/gpt-6-luna` é aceito. Os outros modelos retornam erro, que agora aparece na hora.
+- O `gpt-6-luna` às vezes recusa uma tarefa comum, com justificativas sem relação com ela (ex.: "voting systems"). O host detecta a recusa e pede uma vez para continuar de onde parou (evento `recusa` na auditoria). Se recusar de novo, rode a etapa outra vez: o `plan.md` guarda o progresso.
 - O sandbox só funciona no Linux (bubblewrap).

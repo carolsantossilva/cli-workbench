@@ -41,7 +41,7 @@ export function findDeniedFiles(root: string, deny: readonly string[], maxDepth 
 	return out;
 }
 
-export function buildSandboxArgs(root: string, cwd: string, deny: readonly string[]): string[] {
+export function buildSandboxArgs(root: string, cwd: string, deny: readonly string[], writable = true): string[] {
 	const realRoot = realpathSync(root);
 	const home = os.homedir();
 	const args = [
@@ -56,7 +56,7 @@ export function buildSandboxArgs(root: string, cwd: string, deny: readonly strin
 		const p = path.join(home, t);
 		if (existsSync(p)) args.push("--ro-bind", p, p);
 	}
-	args.push("--bind", realRoot, realRoot);
+	args.push(writable ? "--bind" : "--ro-bind", realRoot, realRoot);
 	for (const f of findDeniedFiles(realRoot, deny)) args.push("--ro-bind", "/dev/null", f);
 	args.push(
 		"--unshare-net",
@@ -77,7 +77,7 @@ export function buildSandboxArgs(root: string, cwd: string, deny: readonly strin
 }
 
 /** Reescreve um comando para rodar dentro do sandbox. */
-export function wrapCommand(command: string, root: string, cwd: string, deny: readonly string[]): string {
-	const args = buildSandboxArgs(root, cwd, deny).map(quote).join(" ");
+export function wrapCommand(command: string, root: string, cwd: string, deny: readonly string[], writable = true): string {
+	const args = buildSandboxArgs(root, cwd, deny, writable).map(quote).join(" ");
 	return `exec bwrap ${args} -- /bin/bash -c ${quote(command)}`;
 }
