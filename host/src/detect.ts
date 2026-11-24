@@ -15,7 +15,7 @@ const NPM_SCRIPTS = ["test", "lint", "typecheck", "check", "build"];
 const MAX_DEPTH = 2;
 const SKIP = new Set(["node_modules", "vendor", "dist", "build", "target", "coverage"]);
 // Nomes que entram no comando sugerido e no system prompt: só os seguros para o shell, sem aspas.
-const SAFE_NAME = /^[A-Za-z0-9._-]+$/;
+const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function commandsIn(dir: string, rel: string): DetectedCommand[] {
 	const out: DetectedCommand[] = [];

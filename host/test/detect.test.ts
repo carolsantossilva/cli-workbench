@@ -34,6 +34,7 @@ test("monorepo: subpastas com cd, pulando node_modules, ocultas, fundo demais e 
 	symlinkSync(path.join(root, "apps/mobile"), path.join(root, "link"));
 	pkg(path.join(root, "x;rm -rf ~"), { test: "x" });
 	pkg(path.join(root, "com espaço"), { test: "x" });
+	pkg(path.join(root, "-P"), { test: "x" });
 	assert.deepEqual(
 		detectCommands(root).map((c) => c.command),
 		["cd apps/mobile && npm test", "cd apps/mobile && npm run typecheck", "cd apps/server && go build ./...", "cd apps/server && go vet ./...", "cd apps/server && go test ./..."],
