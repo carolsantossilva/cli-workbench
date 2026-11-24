@@ -23,7 +23,7 @@ O [Pi](https://pi.dev/) é um harness de agente mínimo, com licença MIT, em Ty
 - `context` e `before_provider_request`, que veem o que vai ao modelo;
 - definições de ferramenta substituíveis, inclusive o `spawnHook` do bash.
 
-O spike de outubro mostrou que esses pontos bastam para aplicar um escopo no momento da ação. O micro MVP de novembro mostrou o mesmo com um modelo real e com sandbox.
+O spike de outubro mostrou que esses pontos bastam para aplicar um escopo no momento da ação. O MVP de novembro mostrou o mesmo com um modelo real e com sandbox.
 
 ## Decisão
 
