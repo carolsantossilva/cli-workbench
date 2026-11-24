@@ -6,7 +6,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-const MARKER = path.join(".workbench", "execucao-ativa.json");
+// Uma foto por run, para que dois runs simultâneos no mesmo projeto não apaguem a do outro.
+const markerPath = (root: string, runId: string) => path.join(root, ".workbench", `execucao-${runId}.json`);
 const CONFIG = ".workbench.json";
 
 interface Snapshot {
@@ -45,7 +46,7 @@ export function findGitEntries(root: string, maxDepth = 12): string[] {
 export function beginGuard(root: string, runId: string): Snapshot {
 	const snap: Snapshot = { runId, pid: process.pid, configExisted: existsSync(path.join(root, CONFIG)), gits: findGitEntries(root) };
 	mkdirSync(path.join(root, ".workbench"), { recursive: true });
-	writeFileSync(path.join(root, MARKER), JSON.stringify(snap) + "\n");
+	writeFileSync(markerPath(root, runId), JSON.stringify(snap) + "\n");
 	return snap;
 }
 
@@ -60,7 +61,7 @@ export function endGuard(root: string, snap: Snapshot): Quarantined[] {
 	if (!snap.configExisted && existsSync(path.join(root, CONFIG))) aside(CONFIG);
 	const known = new Set(snap.gits);
 	for (const g of findGitEntries(root)) if (!known.has(g)) aside(g);
-	rmSync(path.join(root, MARKER), { force: true });
+	rmSync(markerPath(root, snap.runId), { force: true });
 	return moved;
 }
 
@@ -79,19 +80,23 @@ function alive(pid: number): boolean {
  * para desfazer renomeando de volta, caso tenha sido criado por você depois da queda.
  */
 export function recoverInterrupted(root: string): Quarantined[] {
-	const marker = path.join(root, MARKER);
-	if (!existsSync(marker)) return [];
-	let snap: Snapshot;
-	try {
-		snap = JSON.parse(readFileSync(marker, "utf8")) as Snapshot;
-	} catch {
-		rmSync(marker, { force: true });
-		return [];
-	}
-	if (snap.pid && snap.pid !== process.pid && alive(snap.pid)) return [];
-	const moved = endGuard(root, snap);
-	for (const q of moved) {
-		process.stderr.write(`[workbench] o run ${snap.runId} foi interrompido; ${q.path} apareceu depois do início dele e foi movido para ${q.movedTo}. Se foi você que criou, renomeie de volta.\n`);
+	const dir = path.join(root, ".workbench");
+	if (!existsSync(dir)) return [];
+	const moved: Quarantined[] = [];
+	for (const name of readdirSync(dir).filter((n) => /^execucao-.+\.json$/.test(n))) {
+		const marker = path.join(dir, name);
+		let snap: Snapshot;
+		try {
+			snap = JSON.parse(readFileSync(marker, "utf8")) as Snapshot;
+		} catch {
+			rmSync(marker, { force: true });
+			continue;
+		}
+		if (snap.pid && snap.pid !== process.pid && alive(snap.pid)) continue;
+		for (const q of endGuard(root, snap)) {
+			moved.push(q);
+			process.stderr.write(`[workbench] o run ${snap.runId} foi interrompido; ${q.path} apareceu depois do início dele e foi movido para ${q.movedTo}. Se foi você que criou, renomeie de volta.\n`);
+		}
 	}
 	return moved;
 }

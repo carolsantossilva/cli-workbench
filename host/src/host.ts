@@ -305,13 +305,13 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		// funcionam depois de quebras de linha e uma chave nunca casa entre duas mensagens.
 		pi.on("context", async (event, ctx) => {
 			const r = redactDeep(event.messages);
-			send("context", JSON.stringify(event.messages), r.found, ctx.model);
+			send("context", JSON.stringify(r.value), r.found, ctx.model);
 			return r.found.length > 0 ? { messages: r.value } : undefined;
 		});
 
 		pi.on("before_provider_request", async (event, ctx) => {
 			const r = redactDeep(event.payload ?? null);
-			send("payload", JSON.stringify(event.payload ?? null), r.found, ctx.model);
+			send("payload", JSON.stringify(r.value), r.found, ctx.model);
 			return r.found.length > 0 ? r.value : undefined;
 		});
 	}
@@ -361,7 +361,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	for (const q of recovered) audit("violacao", { ...q, acao: "criado num run interrompido; posto de lado" });
 	const rewritten = rewritePrompt(opts.task);
 	const task = rewritten.text;
-	audit("start", { projectDir: root, profile: scope.profile.name, interactive: Boolean(opts.ask), model: `${model.provider}/${model.id}`, task, write: scope.write, commands: commands.map((c) => c.command) });
+	audit("start", { projectDir: root, profile: scope.profile.name, interactive: Boolean(opts.ask), model: `${model.provider}/${model.id}`, task: redactSecrets(task).text, write: scope.write, commands: commands.map((c) => c.command) });
 
 	const { session } = await createAgentSession({
 		cwd: root,

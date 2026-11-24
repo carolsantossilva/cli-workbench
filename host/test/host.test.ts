@@ -9,7 +9,7 @@ import { after, test } from "node:test";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { dropDeniedLines, redactDeep, rewritePrompt, runTask } from "../src/host.ts";
-import { beginGuard } from "../src/guard.ts";
+import { beginGuard, endGuard } from "../src/guard.ts";
 import { loadProjectConfig } from "../src/profiles.ts";
 import { matchesAny } from "../src/policy.ts";
 import { ALWAYS_DENY, WRITE_DENY } from "../src/profiles.ts";
@@ -346,7 +346,7 @@ test("guarda: run interrompido (sem finally) é limpo no próximo uso da configu
 	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"codigo"}\n');
 	assert.equal(loadProjectConfig(root).perfil, undefined, "a configuração plantada não vale");
 	assert.ok(existsSync(path.join(root, ".workbench.json.rejeitado-run-morto")));
-	assert.ok(!existsSync(path.join(root, ".workbench/execucao-ativa.json")));
+	assert.ok(!existsSync(path.join(root, ".workbench/execucao-run-morto.json")));
 });
 
 test("redação percorre cada string: segredo depois de quebra de linha e chave partida entre mensagens", () => {
@@ -427,8 +427,33 @@ test("guarda: não limpa a foto de um run que ainda está vivo", () => {
 	const root = makeProject("vivo");
 	mkdirSync(path.join(root, ".workbench"), { recursive: true });
 	const alivePid = process.ppid;
-	writeFileSync(path.join(root, ".workbench/execucao-ativa.json"), JSON.stringify({ runId: "vivo", pid: alivePid, configExisted: false, gits: [".git"] }));
+	writeFileSync(path.join(root, ".workbench/execucao-vivo.json"), JSON.stringify({ runId: "vivo", pid: alivePid, configExisted: false, gits: [".git"] }));
 	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"docs"}\n');
 	assert.equal(loadProjectConfig(root).perfil, "docs");
-	assert.ok(existsSync(path.join(root, ".workbench/execucao-ativa.json")), "a foto do run vivo continua lá");
+	assert.ok(existsSync(path.join(root, ".workbench/execucao-vivo.json")), "a foto do run vivo continua lá");
+});
+
+test("auditoria: pedido com segredo é gravado redigido e o hash do envio é do conteúdo redigido", async () => {
+	const root = makeProject("audit-segredo");
+	let sentText = "";
+	const { modelRuntime, model } = await fauxRuntime([
+		(context) => {
+			sentText = JSON.stringify(context.messages);
+			return fauxAssistantMessage([fauxText("ok")]);
+		},
+	]);
+	const r = await runTask({ projectDir: root, task: `use a chave ${FAKE_KEY}`, profile: "leitura", modelRuntime, modelOverride: model, auditDir: path.join(tmp, "audit") });
+	const log = readFileSync(r.auditPath, "utf8");
+	assert.ok(!log.includes(FAKE_KEY), "a chave não fica na auditoria");
+	assert.ok(!sentText.includes(FAKE_KEY), "a chave não vai ao modelo");
+});
+
+test("guarda: dois runs no mesmo projeto têm fotos separadas", () => {
+	const root = makeProject("dois-runs");
+	const a = beginGuard(root, "run-a");
+	beginGuard(root, "run-b");
+	endGuard(root, a);
+	assert.ok(existsSync(path.join(root, ".workbench/execucao-run-b.json")), "o fim do run A não apaga a foto do B");
+	writeFileSync(path.join(root, ".workbench.json"), '{"perfil":"codigo"}\n');
+	assert.equal(loadProjectConfig(root).perfil, undefined, "o B morto ainda é limpo");
 });
