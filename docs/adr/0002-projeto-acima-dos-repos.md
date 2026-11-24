@@ -41,8 +41,10 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 3. **A pasta `.workbench/` marca o projeto.**
    - Ela é criada por `wb init` na pasta do projeto, ou no primeiro run.
    - Para achar o projeto, o `wb` parte da raiz do repo atual e sobe pelos diretórios acima dela até achar uma `.workbench/`. Se achar, aquele diretório é o projeto.
+   - A busca para antes de entrar em outro repo git (um repo de fora não vira projeto do de dentro) e nunca considera a home nem o que está acima dela.
    - Se não achar, o projeto é o próprio repo (ou o diretório atual, fora de um repo). É o comportamento de hoje.
    - A busca começa **acima** da raiz do repo: um `.workbench/` que um run antigo deixou dentro do repo não impede que o projeto de fora seja achado. Esse `.workbench/` antigo deixa de ser usado; a auditoria que está nele continua lá.
+   - Se o repo tem um `.workbench.json` próprio, os `deny` dele continuam valendo e somam com os do projeto: aparecer um projeto em volta nunca afrouxa o sandbox. Como o `sandbox` e o `write` do repo se combinam com os do projeto fica em aberto.
    - `-C` continua indicando o projeto explicitamente.
 
 4. **As especificações ficam num repo ou numa issue, conforme o contexto.**
@@ -94,6 +96,7 @@ Rodar `wb` dentro de uma worktree, como é hoje, separa a auditoria e o estado d
 
 - O nome curto que o `--repo` aceita: o nome da pasta, ou o nome do repositório no remoto (ex.: `workbench` para `.worktree/workbench/feat-x`).
 - Até que profundidade o `wb` procura repos dentro do projeto.
+- Como o `sandbox` e o `write` do `.workbench.json` de um repo se combinam com os do projeto (os `deny` somam, item 3).
 - Como o canal remoto (WhatsApp) sabe quais projetos existem: varrendo uma pasta raiz (ex.: `projetos/*`) atrás de `.workbench/`.
 - Um `build` que precise mexer em dois repos ao mesmo tempo: um run por repo, ou um sandbox com vários repos.
 - Quem escolhe o destino quando não há padrão: o `wb` pergunta no primeiro `brainstorm`, ou exige `--spec`.
