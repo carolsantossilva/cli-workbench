@@ -6,9 +6,10 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
 import { detectCommands } from "./detect.ts";
-import { type ApprovalAnswer, type ApprovalRequest, DEFAULT_MODEL, DEFAULT_THINKING, type Decision, defaultAuditDir, describeScope, type RunResult, runTask, THINKING_LEVELS, type ThinkingLevel } from "./host.ts";
-import { loadProjectConfig, SANDBOX_NAMES, type SandboxName, resolveScope } from "./profiles.ts";
+import { type ApprovalAnswer, type ApprovalRequest, DEFAULT_MODEL, DEFAULT_THINKING, type Decision, defaultAuditDir, describeScope, type RunResult, runTask, THINKING_LEVELS } from "./host.ts";
+import { loadProjectConfig, resolveScope, SANDBOX_NAMES } from "./profiles.ts";
 import { findDeniedFiles, sandboxAvailable } from "./sandbox.ts";
+import { parseArgs } from "./args.ts";
 import { runStep } from "./step.ts";
 import { approvalStatus, approve, loadState, preflight, STEP_IDS, type StepId, STEPS } from "./workflows.ts";
 
@@ -55,75 +56,6 @@ ${COMMON_OPTIONS}
 	status: `uso: wb status [-C <dir>]\n\n${COMMON_OPTIONS}`,
 	scope: `uso: wb scope [-C <dir>] [-s <sandbox>]\n\n${COMMON_OPTIONS}\n  -s, --sandbox <nome>       ${SANDBOX_NAMES.join("|")}`,
 };
-
-interface Args {
-	project: string;
-	sandbox?: SandboxName;
-	model?: string;
-	thinking?: ThinkingLevel;
-	noInput: boolean;
-	help: boolean;
-	version: boolean;
-	rest: string[];
-}
-
-// Flags em qualquer posição (clig.dev), "--flag=valor" ou "--flag valor", e "--" encerra as opções (POSIX).
-function parse(argv: string[]): Args {
-	const a: Args = { project: process.cwd(), noInput: false, help: false, version: false, rest: [] };
-	const value = (i: number, flag: string) => {
-		const v = argv[i + 1];
-		if (v === undefined || v.startsWith("-")) throw new Error(`${flag} precisa de um valor`);
-		return v;
-	};
-	for (let i = 0; i < argv.length; i++) {
-		let arg = argv[i];
-		if (arg === "--") {
-			a.rest.push(...argv.slice(i + 1));
-			break;
-		}
-		const eq = arg.startsWith("--") ? arg.indexOf("=") : -1;
-		let inline: string | undefined;
-		if (eq > 0) {
-			inline = arg.slice(eq + 1);
-			arg = arg.slice(0, eq);
-		}
-		const take = (flag: string) => inline ?? value(i++, flag);
-		switch (arg) {
-			case "-C":
-			case "--project":
-				a.project = take(arg);
-				break;
-			case "-s":
-			case "--sandbox":
-				a.sandbox = take(arg) as SandboxName;
-				break;
-			case "-m":
-			case "--model":
-				a.model = take(arg);
-				break;
-			case "--thinking":
-				a.thinking = take(arg) as ThinkingLevel;
-				break;
-			case "--no-input":
-				a.noInput = true;
-				break;
-			case "-h":
-			case "--help":
-				a.help = true;
-				break;
-			case "-V":
-			case "--version":
-				a.version = true;
-				break;
-			default:
-				if (arg.startsWith("-") && arg !== "-") throw new Error(`opção desconhecida: ${arg} (veja wb --help)`);
-				a.rest.push(argv[i]);
-		}
-	}
-	if (a.sandbox && !SANDBOX_NAMES.includes(a.sandbox)) throw new Error(`sandbox desconhecido "${a.sandbox}" (use ${SANDBOX_NAMES.join(", ")})`);
-	if (a.thinking && !THINKING_LEVELS.includes(a.thinking)) throw new Error(`nível de raciocínio desconhecido "${a.thinking}" (use ${THINKING_LEVELS.join(", ")})`);
-	return a;
-}
 
 const color = process.stderr.isTTY && !process.env.NO_COLOR;
 const dim = (s: string) => (color ? `\x1b[2m${s}\x1b[0m` : s);
@@ -192,12 +124,13 @@ function version(): string {
 }
 
 async function main() {
-	const [cmd, ...argv] = process.argv.slice(2);
-	if (!cmd || cmd === "-h" || cmd === "--help") return console.log(HELP.main);
-	if (cmd === "-V" || cmd === "--version") return console.log(version());
-	if (cmd === "help") return console.log(HELP[argv[0] ?? "main"] ?? HELP.main);
-	const args = parse(argv);
+	// Flags valem antes ou depois do comando: "wb -C ~/proj status" e "wb status -C ~/proj".
+	const args = parseArgs(process.argv.slice(2));
+	const [cmd, ...rest] = args.rest;
+	args.rest = rest;
 	if (args.version) return console.log(version());
+	if (!cmd) return console.log(HELP.main);
+	if (cmd === "help") return console.log(HELP[rest[0] ?? "main"] ?? HELP.main);
 	if (args.help) return console.log(HELP[cmd] ?? HELP.main);
 	const root = realpathSync(args.project);
 

@@ -1,7 +1,7 @@
 // Workflows: etapas com entradas, saída e escopo próprios, encadeadas por arquivos
 // em docs/workbench/. O design precisa ser aprovado (por hash) antes do build.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ALWAYS_DENY, type EffectiveScope, type ProjectConfig, WRITE_DENY } from "./profiles.ts";
 
@@ -159,9 +159,22 @@ const statePath = (root: string) => path.join(root, ".workbench", "state.json");
 
 export function loadState(root: string): State {
 	const p = statePath(root);
+	migrateLegacyState(root);
 	if (!existsSync(p)) return { approvals: {}, runs: {} };
 	const s = JSON.parse(readFileSync(p, "utf8")) as Partial<State>;
 	return { approvals: s.approvals ?? {}, runs: s.runs ?? {} };
+}
+
+/** .workbench/estado.json (aprovacoes/execucoes) da versão em português vira state.json, uma vez. */
+function migrateLegacyState(root: string): void {
+	const legacy = path.join(root, ".workbench", "estado.json");
+	if (!existsSync(legacy) || existsSync(statePath(root))) return;
+	type Legacy = { aprovacoes?: State["approvals"]; execucoes?: Partial<Record<StepId, { runId: string; at: string; saida: boolean }>> };
+	const old = JSON.parse(readFileSync(legacy, "utf8")) as Legacy;
+	const runs: State["runs"] = {};
+	for (const [id, r] of Object.entries(old.execucoes ?? {})) if (r) runs[id as StepId] = { runId: r.runId, at: r.at, outputWritten: r.saida };
+	saveState(root, { approvals: old.aprovacoes ?? {}, runs });
+	rmSync(legacy);
 }
 
 export function saveState(root: string, state: State): void {
