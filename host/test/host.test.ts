@@ -626,6 +626,10 @@ test("a home, ou um diretório acima dela, não pode ser o projeto", () => {
 		assert.throws(() => buildSandboxArgs(casa, casa, ALWAYS_DENY), /não pode ser a home/);
 		assert.doesNotThrow(() => assertProjectRoot(path.join(casa, "proj")));
 		assert.doesNotThrow(() => assertProjectRoot(makeProject("vizinho")), "um irmão da home passa");
+		const pontos = path.join(makeProject("raiz-pontos"), "..user");
+		mkdirSync(pontos);
+		process.env.HOME = pontos;
+		assert.throws(() => assertProjectRoot(path.dirname(pontos)), /não pode ser a home/, 'home "..user" dentro da raiz');
 	} finally {
 		process.env.HOME = old;
 	}

@@ -18,10 +18,13 @@ export function assertProjectRoot(root: string): void {
 	try {
 		home = realpathSync(os.homedir());
 	} catch {
+		// Sem a home real não há o que expor.
 		return;
 	}
 	const rel = path.relative(realRoot, home);
-	if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
+	// Fora da raiz é só ".." ou "../…": "..user" é uma pasta dentro dela.
+	const outside = rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel);
+	if (!outside) {
 		throw new Error(`o projeto não pode ser a home nem um diretório que a contém (${realRoot}); use a pasta do projeto`);
 	}
 }
