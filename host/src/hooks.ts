@@ -45,11 +45,16 @@ export interface HookSource {
 interface Installed {
 	from: "main" | "local";
 	commit: string;
+	/** --local com mudanças não commitadas: o conteúdo não é o do commit. */
+	dirty?: boolean;
 	sha256: string;
 }
 
+// Sem prompt de credencial: um remoto que pede senha falha na hora em vez de esperar o timeout.
+const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
+
 function git(repo: string, ...args: string[]): string {
-	return execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 }).trim();
+	return execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60_000, env: GIT_ENV }).trim();
 }
 
 /** O repo de onde este wb roda. */
@@ -61,7 +66,8 @@ export function defaultSource(): HookSource {
 
 function fetchMain(repo: string): boolean {
 	try {
-		git(repo, "fetch", "-q", "origin", "main");
+		// Refspec explícito: atualiza origin/main mesmo num clone de uma branch só.
+		git(repo, "fetch", "-q", "origin", `+refs/heads/main:${MAIN}`);
 		return true;
 	} catch {
 		return false;
@@ -157,12 +163,14 @@ export interface InstallResult {
 	hook: string;
 	from: "main" | "local";
 	commit: string;
+	dirty?: boolean;
 	agents: { name: AgentName; config: string; result: "instalado" | "já estava" | "sem o agente"; backup?: string }[];
 }
 
-function scriptToInstall(source: HookSource, local: boolean): { content: Buffer; from: Installed["from"]; commit: string } {
+function scriptToInstall(source: HookSource, local: boolean): { content: Buffer; from: Installed["from"]; commit: string; dirty?: boolean } {
 	if (local) {
-		return { content: readFileSync(path.join(source.repo, source.rel)), from: "local", commit: git(source.repo, "rev-parse", "HEAD") };
+		const dirty = git(source.repo, "status", "--porcelain", "--", source.rel) !== "";
+		return { content: readFileSync(path.join(source.repo, source.rel)), from: "local", commit: git(source.repo, "rev-parse", "HEAD"), dirty };
 	}
 	if (!fetchMain(source.repo)) throw new Error(`não deu para buscar a main de origin em ${source.repo}; sem rede, use "wb hooks install --local"`);
 	const main = mainVersion(source);
@@ -175,10 +183,10 @@ export function installHooks(home = os.homedir(), { local = false, source = defa
 	const hook = installedHookPath(home);
 	mkdirSync(path.dirname(hook), { recursive: true, mode: 0o700 });
 	writeAtomic(hook, script.content, 0o700);
-	const installed: Installed = { from: script.from, commit: script.commit, sha256: sha256(script.content) };
+	const installed: Installed = { from: script.from, commit: script.commit, dirty: script.dirty, sha256: sha256(script.content) };
 	writeAtomic(metaPath(home), `${JSON.stringify(installed, null, 2)}\n`, 0o600);
 
-	const result: InstallResult = { hook, from: script.from, commit: script.commit, agents: [] };
+	const result: InstallResult = { hook, from: script.from, commit: script.commit, dirty: script.dirty, agents: [] };
 	for (const a of agents(home)) {
 		if (!existsSync(a.dir)) {
 			result.agents.push({ name: a.name, config: a.config, result: "sem o agente" });
@@ -201,13 +209,21 @@ export function installHooks(home = os.homedir(), { local = false, source = defa
 	return result;
 }
 
-export type CopyState = "ok" | "ausente" | "editada depois de instalada" | "desatualizada: a main tem outra versão" | "do checkout local, não da main";
+export type CopyState =
+	| "ok"
+	| "ausente"
+	| "instalada por uma versão antiga do wb"
+	| "editada depois de instalada"
+	| "desatualizada: a main tem outra versão"
+	| "o script não está mais na main"
+	| "do checkout local, não da main";
 
 export interface HookStatus {
 	hook: string;
 	copy: CopyState;
 	/** Commit de onde a cópia veio. */
 	commit?: string;
+	dirty?: boolean;
 	/** Commit da main usada na comparação. */
 	main?: string;
 	/** false: sem acesso ao remoto, comparado com a última main buscada. */
@@ -222,14 +238,17 @@ export function hooksStatus(home = os.homedir(), { source = defaultSource() }: {
 	const main = mainVersion(source);
 	let copy: CopyState;
 	if (!existsSync(hook)) copy = "ausente";
-	else if (!installed || sha256(readFileSync(hook)) !== installed.sha256) copy = "editada depois de instalada";
+	else if (!installed) copy = "instalada por uma versão antiga do wb";
+	else if (sha256(readFileSync(hook)) !== installed.sha256) copy = "editada depois de instalada";
 	else if (installed.from === "local") copy = "do checkout local, não da main";
-	else if (main && sha256(main.content) !== installed.sha256) copy = "desatualizada: a main tem outra versão";
+	else if (!main) copy = "o script não está mais na main";
+	else if (sha256(main.content) !== installed.sha256) copy = "desatualizada: a main tem outra versão";
 	else copy = "ok";
 	return {
 		hook,
 		copy,
 		commit: installed?.commit,
+		dirty: installed?.dirty,
 		main: main?.commit,
 		fetched,
 		agents: agents(home).map((a) => {

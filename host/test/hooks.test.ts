@@ -128,6 +128,8 @@ test("--local instala a versão do checkout, e o status diz que não é a da mai
 	const h = home(".claude");
 	const r = installHooks(h, { source, local: true });
 	assert.equal(r.from, "local");
+	assert.equal(r.dirty, true, "conteúdo não commitado fica marcado");
+	assert.equal(hooksStatus(h, { source }).dirty, true);
 	assert.ok(readFileSync(installedHookPath(h), "utf8").endsWith("# testando\n"));
 	assert.equal(hooksStatus(h, { source }).copy, "do checkout local, não da main");
 });
@@ -219,4 +221,29 @@ test("home com espaço: o caminho vai entre aspas e o status reconhece", () => {
 	assert.equal(r.status, 0, r.stderr);
 	assert.equal(r.stdout, "", "comando que não é push: o hook não diz nada");
 	assert.equal(hooksStatus(h, { source }).agents[0].state, "ativo");
+});
+
+test("status: instalação antiga sem registro e script removido da main", () => {
+	const source = repo();
+	const h = home(".claude");
+	installHooks(h, { source });
+	rmSync(installedHookPath(h).replace(/\.py$/, ".json"));
+	assert.equal(hooksStatus(h, { source }).copy, "instalada por uma versão antiga do wb");
+
+	installHooks(h, { source });
+	git(source.repo, "rm", "-q", REL);
+	git(source.repo, "commit", "-qm", "tira o hook");
+	git(source.repo, "push", "-q", "origin", "HEAD:main");
+	assert.equal(hooksStatus(h, { source }).copy, "o script não está mais na main");
+});
+
+test("clone de uma branch só: o fetch ainda atualiza origin/main", () => {
+	const source = repo();
+	const single = path.join(tmp, `s${n++}`);
+	git(source.repo, "push", "-q", "origin", "HEAD:outra");
+	git(tmp, "clone", "-q", "--single-branch", "-b", "outra", source.remote, single);
+	updateMainElsewhere(source.remote, `${REAL_HOOK}# v3\n`);
+	const h = home(".claude");
+	installHooks(h, { source: { repo: single, rel: REL } });
+	assert.ok(readFileSync(installedHookPath(h), "utf8").endsWith("# v3\n"));
 });

@@ -255,13 +255,13 @@ function hooksCommand(args: Args, rest: string[]) {
 	checkUsage(`hooks ${sub ?? ""}`.trim(), args, more, { flags: sub === "install" ? ["local"] : [] });
 	if (sub === "install") {
 		const r = installHooks(undefined, { local: args.local });
-		console.log(`Script: ${r.hook} (${r.from === "main" ? "da main" : "do checkout local"}, ${r.commit.slice(0, 7)})`);
+		console.log(`Script: ${r.hook} (${r.from === "main" ? "da main" : "do checkout local"}, ${r.commit.slice(0, 7)}${r.dirty ? " com mudanças não commitadas" : ""})`);
 		for (const a of r.agents) console.log(`${a.name}: ${a.result}${a.result === "instalado" ? ` em ${a.config}` : ""}${a.backup ? dim(` (backup: ${a.backup})`) : ""}`);
 		return;
 	}
 	if (sub === "status") {
 		const s = hooksStatus();
-		console.log(`Script: ${s.hook} (${s.copy}${s.commit ? `, de ${s.commit.slice(0, 7)}` : ""})`);
+		console.log(`Script: ${s.hook} (${s.copy}${s.commit ? `, de ${s.commit.slice(0, 7)}${s.dirty ? " com mudanças não commitadas" : ""}` : ""})`);
 		console.log(dim(`main de origin: ${s.main?.slice(0, 7) ?? "sem o script"}${s.fetched ? "" : " (sem acesso ao remoto: a última main buscada)"}`));
 		for (const a of s.agents) {
 			console.log(`${a.name}: ${a.state}`);
