@@ -35,7 +35,7 @@ Comandos:
   step approve <etapa>         aprova a saída de uma etapa (hoje: design) pelo sha256; só no terminal, digitando "aprovar"
   status                       mostra em que etapa o projeto está e o próximo passo
   scope                        mostra o que o agente pode ler, escrever e rodar
-  hooks install|status         instala na máquina o review antes do push (Claude Code e Codex)
+  hooks install|status         instala na máquina o review antes do push (Claude Code e Codex), da main
   help [comando]               ajuda de um comando
 
 ${COMMON_OPTIONS}
@@ -58,15 +58,17 @@ Etapas: ${STEP_IDS.join(" → ")}
 ${COMMON_OPTIONS}
   -m, --model, --thinking, --no-input: como em "wb run"`,
 	status: `uso: wb status [-C <dir>]\n\n${COMMON_OPTIONS}`,
-	hooks: `uso: wb hooks install
+	hooks: `uso: wb hooks install [--local]
      wb hooks status
 
 Review antes do push para os agentes usados fora do wb (Claude Code e Codex).
-install copia o script para ~/.local/share/workbench/hooks/ e aponta os hooks
-PreToolUse de ~/.claude/settings.json e ~/.codex/hooks.json para a cópia,
-trocando hooks de review antigos e guardando um backup de cada arquivo alterado.
-Editar o repo não muda a guarda em vigor: rode install de novo para atualizar.
-status mostra se a cópia é a desta versão e para onde cada agente aponta.`,
+install busca a main de origin, copia o script dela para ~/.local/share/workbench/hooks/
+e aponta os hooks PreToolUse de ~/.claude/settings.json e ~/.codex/hooks.json para a
+cópia, trocando hooks de review antigos e guardando um backup de cada arquivo alterado.
+O que vale é a main: editar o checkout, em qualquer branch, não muda a guarda.
+status compara a cópia com a main de origin e mostra para onde cada agente aponta.
+
+  --local   instala a versão do checkout (para testar uma mudança antes do merge)`,
 	scope: `uso: wb scope [-C <dir>] [-s <sandbox>]\n\n${COMMON_OPTIONS}\n  -s, --sandbox <nome>       ${SANDBOX_NAMES.join("|")}`,
 };
 
@@ -168,8 +170,8 @@ function version(): string {
 	return `wb ${pkg.version}`;
 }
 
-type Flag = "sandbox" | "model" | "thinking" | "noInput";
-const FLAG_NAMES: Record<Flag, string> = { sandbox: "--sandbox", model: "--model", thinking: "--thinking", noInput: "--no-input" };
+type Flag = "sandbox" | "model" | "thinking" | "noInput" | "local";
+const FLAG_NAMES: Record<Flag, string> = { sandbox: "--sandbox", model: "--model", thinking: "--thinking", noInput: "--no-input", local: "--local" };
 
 /** Recusa flags e argumentos que o comando não usa, em vez de ignorá-los calado. */
 function checkUsage(command: string, args: Args, rest: string[], { flags, min = 0, max = min }: { flags: Flag[]; min?: number; max?: number }) {
@@ -250,16 +252,17 @@ async function stepRun(root: string, args: Args, rest: string[]) {
 
 function hooksCommand(args: Args, rest: string[]) {
 	const [sub, ...more] = rest;
-	checkUsage(`hooks ${sub ?? ""}`.trim(), args, more, { flags: [] });
+	checkUsage(`hooks ${sub ?? ""}`.trim(), args, more, { flags: sub === "install" ? ["local"] : [] });
 	if (sub === "install") {
-		const r = installHooks();
-		console.log(`Script: ${r.hook}`);
+		const r = installHooks(undefined, { local: args.local });
+		console.log(`Script: ${r.hook} (${r.from === "main" ? "da main" : "do checkout local"}, ${r.commit.slice(0, 7)})`);
 		for (const a of r.agents) console.log(`${a.name}: ${a.result}${a.result === "instalado" ? ` em ${a.config}` : ""}${a.backup ? dim(` (backup: ${a.backup})`) : ""}`);
 		return;
 	}
 	if (sub === "status") {
 		const s = hooksStatus();
-		console.log(`Script: ${s.hook} (${s.copy})`);
+		console.log(`Script: ${s.hook} (${s.copy}${s.commit ? `, de ${s.commit.slice(0, 7)}` : ""})`);
+		console.log(dim(`main de origin: ${s.main?.slice(0, 7) ?? "sem o script"}${s.fetched ? "" : " (sem acesso ao remoto: a última main buscada)"}`));
 		for (const a of s.agents) {
 			console.log(`${a.name}: ${a.state}`);
 			if (a.state === "aponta para outro script") for (const c of a.commands) console.log(dim(`  ${c}`));

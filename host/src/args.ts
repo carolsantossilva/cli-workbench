@@ -9,13 +9,15 @@ export interface Args {
 	model?: string;
 	thinking?: ThinkingLevel;
 	noInput: boolean;
+	/** wb hooks install: a versão do checkout em vez da main. */
+	local: boolean;
 	help: boolean;
 	version: boolean;
 	rest: string[];
 }
 
 export function parseArgs(argv: string[], cwd = process.cwd()): Args {
-	const a: Args = { project: cwd, noInput: false, help: false, version: false, rest: [] };
+	const a: Args = { project: cwd, noInput: false, local: false, help: false, version: false, rest: [] };
 	const value = (i: number, flag: string) => {
 		const v = argv[i + 1];
 		if (v === undefined || v.startsWith("-")) throw new Error(`${flag} precisa de um valor`);
@@ -56,6 +58,9 @@ export function parseArgs(argv: string[], cwd = process.cwd()): Args {
 				break;
 			case "--no-input":
 				a.noInput = true;
+				break;
+			case "--local":
+				a.local = true;
 				break;
 			case "-h":
 			case "--help":

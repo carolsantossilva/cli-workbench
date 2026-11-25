@@ -116,12 +116,13 @@ As chaves antigas em português (`perfil`, `negar`, `perfis`) dão erro com a in
 Quando você usa o Claude Code ou o Codex direto, sem o `wb`, o agente faz push sozinho. O `wb hooks install` instala um hook que revisa cada push antes de ele acontecer:
 
 ```sh
-wb hooks install   # copia o script e aponta os dois agentes para ele
-wb hooks status    # a cópia é a desta versão? para onde cada agente aponta?
+wb hooks install           # busca a main de origin, copia o script dela e aponta os dois agentes para a cópia
+wb hooks install --local   # a versão do checkout, para testar uma mudança no hook antes do merge
+wb hooks status            # a cópia é a da main atual? para onde cada agente aponta?
 ```
 
-- O script (`hooks/review-before-push.py`) é copiado para `~/.local/share/workbench/hooks/`. Os hooks `PreToolUse` de `~/.claude/settings.json` e `~/.codex/hooks.json` passam a apontar para a cópia. Um hook de review antigo é trocado, os outros hooks ficam, e cada arquivo alterado ganha um backup `*.antes-wb-<data>`.
-- A guarda em vigor é a cópia, não o repo: editar o checkout, em qualquer branch, não muda o que está valendo. Para atualizar, rode `wb hooks install` de novo. O `wb hooks status` avisa quando a cópia é diferente da versão do `wb`.
+- O script (`hooks/review-before-push.py`) vem da `main` de `origin` (depois de um `git fetch`) e é copiado para `~/.local/share/workbench/hooks/`. Os hooks `PreToolUse` de `~/.claude/settings.json` e `~/.codex/hooks.json` passam a apontar para a cópia. Um hook de review antigo é trocado, os outros hooks ficam, e cada arquivo alterado ganha um backup `*.antes-wb-<data>`.
+- O que vale é a `main`, ou seja, o que passou por PR: editar o checkout, em qualquer branch, não muda a guarda. A cópia só muda com um novo `wb hooks install`; o hook não busca nada na rede a cada comando. O `wb hooks status` busca a `main` e avisa quando ela tem outra versão, quando a cópia veio de um `--local` ou quando foi editada depois de instalada. Sem rede, compara com a última `main` buscada.
 - A cada `git push` do agente, outro agente, só leitura, revisa o diff numa cópia do commit e bloqueia se achar um problema concreto. O relatório fica em `~/.local/state/agent-reviews/`.
 - Push só de remoção (`git push origin --delete <branch>` ou `:<branch>`) passa sem review, porque não envia código. A branch principal (`main`, `master` ou o `HEAD` do remoto) não pode ser removida.
 - Para saber qual repositório e qual commit revisar, o push precisa vir sozinho: `git [-C <repo>] push ...`, sem `&&`, sem `sh -c` e sem `-c` do git.
