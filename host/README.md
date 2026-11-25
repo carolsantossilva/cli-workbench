@@ -111,10 +111,25 @@ As chaves antigas em português (`perfil`, `negar`, `perfis`) dão erro com a in
 - **Comandos detectados** a partir de `package.json`, `go.mod` e `Cargo.toml`, na raiz e em subpastas até 2 níveis (monorepos como `apps/mobile`), listados para o modelo já com o `cd` necessário (ex.: `cd apps/mobile && npm test`).
 - **Auditoria** em `<projeto>/.workbench/runs/<run>.jsonl`, fora do git. Registra cada decisão e cada envio ao provedor (modelo, bytes e sha256, nunca o conteúdo), os tokens de cada resposta do modelo (evento `usage`: entrada, cache, saída, raciocínio e custo, cobrado ou estimado) com o total no evento `end`, além dos arquivos alterados segundo o git. O resumo no fim do `wb run`/`wb step run` mostra o total de tokens. O agente não lê `.workbench/`: trechos de runs anteriores não voltam ao modelo.
 
+## Review antes do push (fora do wb)
+
+Quando você usa o Claude Code ou o Codex direto, sem o `wb`, o agente faz push sozinho. O `wb hooks install` instala um hook que revisa cada push antes de ele acontecer:
+
+```sh
+wb hooks install   # copia o script e aponta os dois agentes para ele
+wb hooks status    # a cópia é a desta versão? para onde cada agente aponta?
+```
+
+- O script (`hooks/review-before-push.py`) é copiado para `~/.local/share/workbench/hooks/`. Os hooks `PreToolUse` de `~/.claude/settings.json` e `~/.codex/hooks.json` passam a apontar para a cópia. Um hook de review antigo é trocado, os outros hooks ficam, e cada arquivo alterado ganha um backup `*.antes-wb-<data>`.
+- A guarda em vigor é a cópia, não o repo: editar o checkout, em qualquer branch, não muda o que está valendo. Para atualizar, rode `wb hooks install` de novo. O `wb hooks status` avisa quando a cópia é diferente da versão do `wb`.
+- A cada `git push` do agente, outro agente, só leitura, revisa o diff numa cópia do commit e bloqueia se achar um problema concreto. O relatório fica em `~/.local/state/agent-reviews/`.
+- Push só de remoção (`git push origin --delete <branch>` ou `:<branch>`) passa sem review, porque não envia código. A branch principal (`main`, `master` ou o `HEAD` do remoto) não pode ser removida.
+- Para saber qual repositório e qual commit revisar, o push precisa vir sozinho: `git [-C <repo>] push ...`, sem `&&`, sem `sh -c` e sem `-c` do git.
+
 ## Testes
 
 ```sh
-npm test          # ponta a ponta com o provider faux do Pi (sem chave, sem rede)
+npm test          # ponta a ponta com o provider faux do Pi (sem chave, sem rede) e os testes do hook
 npm run typecheck
 ```
 

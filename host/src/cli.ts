@@ -6,6 +6,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { detectCommands } from "./detect.ts";
+import { hooksStatus, installHooks } from "./hooks.ts";
 import { type ApprovalAnswer, type ApprovalRequest, DEFAULT_MODEL, DEFAULT_THINKING, type Decision, describeScope, type RunResult, runTask, THINKING_LEVELS, type TokenUsage } from "./host.ts";
 import { resolveScope, SANDBOX_NAMES } from "./sandbox-profiles.ts";
 import { loadProjectConfig } from "./project-config.ts";
@@ -34,6 +35,7 @@ Comandos:
   step approve <etapa>         aprova a saída de uma etapa (hoje: design) pelo sha256; só no terminal, digitando "aprovar"
   status                       mostra em que etapa o projeto está e o próximo passo
   scope                        mostra o que o agente pode ler, escrever e rodar
+  hooks install|status         instala na máquina o review antes do push (Claude Code e Codex)
   help [comando]               ajuda de um comando
 
 ${COMMON_OPTIONS}
@@ -56,6 +58,15 @@ Etapas: ${STEP_IDS.join(" → ")}
 ${COMMON_OPTIONS}
   -m, --model, --thinking, --no-input: como em "wb run"`,
 	status: `uso: wb status [-C <dir>]\n\n${COMMON_OPTIONS}`,
+	hooks: `uso: wb hooks install
+     wb hooks status
+
+Review antes do push para os agentes usados fora do wb (Claude Code e Codex).
+install copia o script para ~/.local/share/workbench/hooks/ e aponta os hooks
+PreToolUse de ~/.claude/settings.json e ~/.codex/hooks.json para a cópia,
+trocando hooks de review antigos e guardando um backup de cada arquivo alterado.
+Editar o repo não muda a guarda em vigor: rode install de novo para atualizar.
+status mostra se a cópia é a desta versão e para onde cada agente aponta.`,
 	scope: `uso: wb scope [-C <dir>] [-s <sandbox>]\n\n${COMMON_OPTIONS}\n  -s, --sandbox <nome>       ${SANDBOX_NAMES.join("|")}`,
 };
 
@@ -237,6 +248,28 @@ async function stepRun(root: string, args: Args, rest: string[]) {
 	if (id === "design" && r.outputWritten) console.error("Revise o design e aprove para liberar o build: wb step approve design");
 }
 
+function hooksCommand(args: Args, rest: string[]) {
+	const [sub, ...more] = rest;
+	checkUsage(`hooks ${sub ?? ""}`.trim(), args, more, { flags: [] });
+	if (sub === "install") {
+		const r = installHooks();
+		console.log(`Script: ${r.hook}`);
+		for (const a of r.agents) console.log(`${a.name}: ${a.result}${a.result === "instalado" ? ` em ${a.config}` : ""}${a.backup ? dim(` (backup: ${a.backup})`) : ""}`);
+		return;
+	}
+	if (sub === "status") {
+		const s = hooksStatus();
+		console.log(`Script: ${s.hook} (${s.copy})`);
+		for (const a of s.agents) {
+			console.log(`${a.name}: ${a.state}`);
+			if (a.state === "aponta para outro script") for (const c of a.commands) console.log(dim(`  ${c}`));
+		}
+		if (s.copy !== "ok" || s.agents.some((a) => a.state === "ausente" || a.state === "aponta para outro script")) console.log('\nRode "wb hooks install" para atualizar.');
+		return;
+	}
+	throw new Error(`subcomando desconhecido "hooks ${sub ?? ""}" (use hooks install ou hooks status)\n\n${HELP.hooks}`);
+}
+
 const COMMANDS: Record<string, (root: string, args: Args, rest: string[]) => void | Promise<void>> = {
 	run: runCommand,
 	step: stepCommand,
@@ -252,6 +285,7 @@ async function main() {
 	if (!cmd) return console.log(HELP.main);
 	if (cmd === "help") return console.log(HELP[rest[0] ?? "main"] ?? HELP.main);
 	if (args.help) return console.log(HELP[cmd] ?? HELP.main);
+	if (cmd === "hooks") return hooksCommand(args, rest);
 	const command = COMMANDS[cmd];
 	if (!command) throw new Error(`comando desconhecido "${cmd}"\n\n${HELP.main}`);
 	await command(projectRoot(args.project), args, rest);
