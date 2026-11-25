@@ -119,3 +119,15 @@ test("wb hooks pela CLI: install, status e uso errado", () => {
 	assert.match(wb("hooks", "status", "x").stderr, /argumento a mais/);
 	assert.match(wb("hooks", "status", "-s", "docs-only").stderr, /--sandbox não vale/);
 });
+
+test("home com espaço: o caminho vai entre aspas e o status reconhece", () => {
+	const h = path.join(tmp, "com espaço", "it's");
+	mkdirSync(path.join(h, ".claude"), { recursive: true });
+	installHooks(h);
+	const command: string = json(path.join(h, ".claude/settings.json")).hooks.PreToolUse[0].hooks[0].command;
+	assert.match(command, / '.*com espaço\/it'\\''s\/\.local\/share\/workbench\/hooks\/review-before-push\.py' claude$/);
+	const r = spawnSync("sh", ["-c", `${command.replace(/ claude$/, "")} claude`], { input: JSON.stringify({ tool_input: { command: "git status" } }), encoding: "utf8" });
+	assert.equal(r.status, 0, r.stderr);
+	assert.equal(r.stdout, "", "comando que não é push: o hook não diz nada");
+	assert.equal(hooksStatus(h).agents[0].state, "ativo");
+});

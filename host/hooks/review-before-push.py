@@ -58,6 +58,9 @@ def git(repo, *args, optional=False):
 
 
 HEREDOC = re.compile(r"(?<!<)<<(?!<)-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
+SHELL_WORD = re.compile(r"(?:^|[\s;&|(/])(?:" + "|".join(sorted(SHELLS)) + r")(?=$|[\s;&|)])")
+PUSH_LINE = re.compile(r"\bgit\b.*\bpush\b")
 
 
 def strip_heredocs(command):
@@ -70,8 +73,12 @@ def strip_heredocs(command):
         end = i
         for match in HEREDOC.finditer(line):
             tag = match.group(2)
+            start = end
             while end < len(lines) and lines[end].strip() != tag:
                 end += 1
+            # Um heredoc entregue a um shell é script, não texto: um push nele não pode sumir.
+            if SHELL_WORD.search(line) and any(PUSH_LINE.search(body) for body in lines[start:end]):
+                raise RuntimeError("Execute git push diretamente, fora de um heredoc para o shell, para fazer o review.")
             end += 1
         if end > len(lines):
             # Sem a linha final, não é um heredoc que dê para pular: lê tudo como comando.
@@ -97,7 +104,7 @@ def push_request(command, cwd):
     tokens = tokenize(command)
     if tokens is None:
         # Sem conseguir ler o comando, só bloqueia se ele parece um push.
-        if any(re.search(r"\bgit\b.*\bpush\b", line) for line in strip_heredocs(command).split("\n")):
+        if any(PUSH_LINE.search(line) for line in strip_heredocs(command).split("\n")):
             raise RuntimeError("Não deu para ler o comando (aspas sem par?). Rode o git push sozinho.")
         return None
     for index, token in enumerate(tokens):
@@ -136,9 +143,16 @@ def push_request(command, cwd):
         return repo, tokens[cursor + 1:]
     # Shell scripts have their own cwd/expansion rules; ask for a direct push.
     for index, token in enumerate(tokens):
-        if Path(token).name in {"sh", "bash", "zsh"} and "-c" in tokens[index + 1:]:
-            script_index = tokens.index("-c", index + 1) + 1
-            if script_index < len(tokens) and push_request(tokens[script_index], cwd):
+        if Path(token).name not in SHELLS:
+            continue
+        # -c sozinho ou junto com outras opções curtas (-lc, -ec, -xc).
+        flag = next((i for i in range(index + 1, len(tokens)) if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", tokens[i])), None)
+        if flag is not None and flag + 1 < len(tokens):
+            try:
+                inner = push_request(tokens[flag + 1], cwd)
+            except RuntimeError:
+                inner = True
+            if inner:
                 raise RuntimeError("Execute git push diretamente, fora de sh/bash -c, para fazer o review.")
     return None
 

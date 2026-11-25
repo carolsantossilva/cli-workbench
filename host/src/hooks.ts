@@ -48,6 +48,14 @@ function python(): string {
 	return existsSync("/usr/bin/python3") ? "/usr/bin/python3" : "python3";
 }
 
+/** Aspas simples quando o caminho tem espaço ou outro caractere do shell. */
+const shellQuote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`);
+
+/** O comando que cada agente roda: o caminho da cópia sempre entre aspas se preciso. */
+export function hookCommand(home: string, agent: AgentName): string {
+	return `${python()} ${shellQuote(installedHookPath(home))} ${agent}`;
+}
+
 const sha256 = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
 
 /** Algum hook de review antes do push, deste wb ou de uma instalação antiga. */
@@ -99,7 +107,7 @@ export function installHooks(home = os.homedir()): InstallResult {
 			continue;
 		}
 		const before = existsSync(a.config) ? readFileSync(a.config, "utf8") : undefined;
-		const cfg = withReviewHook(readConfig(a.config), `${python()} ${hook} ${a.name}`);
+		const cfg = withReviewHook(readConfig(a.config), hookCommand(home, a.name));
 		const after = `${JSON.stringify(cfg, null, 2)}\n`;
 		if (before !== undefined && JSON.stringify(JSON.parse(before.trim() || "{}")) === JSON.stringify(cfg)) {
 			result.agents.push({ name: a.name, config: a.config, result: "já estava" });
@@ -134,7 +142,7 @@ export function hooksStatus(home = os.homedir()): HookStatus {
 				.flatMap((g) => g.hooks ?? [])
 				.filter(isReviewHook)
 				.map((h) => String(h.command));
-			const ours = commands.filter((c) => c.split(" ").includes(hook) && c.endsWith(` ${a.name}`));
+			const ours = commands.filter((c) => c === hookCommand(home, a.name));
 			const state = commands.length === 0 ? "ausente" : ours.length === commands.length ? "ativo" : "aponta para outro script";
 			return { name: a.name, state, commands };
 		}),

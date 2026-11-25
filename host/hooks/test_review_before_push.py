@@ -81,6 +81,21 @@ class MoreParsing(unittest.TestCase):
             hook.push_request('echo "a <<EOF"\ngit push origin HEAD', "/tmp")
 
 
+class NestedShells(unittest.TestCase):
+    def test_shell_flags_with_c(self):
+        for command in ("bash -lc 'git push origin HEAD'", "sh -ec 'git push'", "bash -o pipefail -c 'git push'", "/bin/zsh -c 'cd x && git push'"):
+            with self.assertRaisesRegex(RuntimeError, "fora de sh/bash -c", msg=command):
+                hook.push_request(command, "/tmp")
+        self.assertIsNone(hook.push_request("bash -lc 'npm test'", "/tmp"))
+
+    def test_heredoc_fed_to_a_shell_is_a_script(self):
+        for command in ("bash <<'EOF'\ngit push origin HEAD\nEOF", "cat <<EOF | sh\ncd x\ngit -C y push\nEOF"):
+            with self.assertRaisesRegex(RuntimeError, "heredoc para o shell", msg=command):
+                hook.push_request(command, "/tmp")
+        self.assertIsNone(hook.push_request("bash <<'EOF'\nnpm test\nEOF", "/tmp"))
+        self.assertIsNone(hook.push_request(COMMIT_WITH_HEREDOC, "/tmp"), "texto de commit continua sendo texto")
+
+
 class Deletion(unittest.TestCase):
     """Remoção conferida contra um remoto de verdade (um repositório bare local)."""
 

@@ -125,6 +125,7 @@ wb hooks status    # a cópia é a desta versão? para onde cada agente aponta?
 - A cada `git push` do agente, outro agente, só leitura, revisa o diff numa cópia do commit e bloqueia se achar um problema concreto. O relatório fica em `~/.local/state/agent-reviews/`.
 - Push só de remoção (`git push origin --delete <branch>` ou `:<branch>`) passa sem review, porque não envia código. A branch principal (`main`, `master` ou o `HEAD` do remoto) não pode ser removida.
 - Para saber qual repositório e qual commit revisar, o push precisa vir sozinho: `git [-C <repo>] push ...`, sem `&&`, sem `sh -c` e sem `-c` do git.
+- É uma guarda contra engano, não contra um agente tentando contorná-la: um alias do git (`git p` com `alias.p=push`) ou uma ref local forjada com `git update-ref` (que muda a base do diff revisado) ainda passam.
 
 ## Testes
 
