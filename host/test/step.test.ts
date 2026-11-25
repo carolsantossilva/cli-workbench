@@ -181,3 +181,18 @@ test("brainstorm não segue symlink ao gravar idea.md", async () => {
 	await assert.rejects(runStep({ ...m, projectDir: root2, id: "brainstorm", note: "ideia" }), /symlink/);
 	assert.ok(!existsSync(path.join(root2, ".workbench/idea.md")));
 });
+
+test("step run: o que um run interrompido deixou entra na auditoria do novo run", async () => {
+	const root = makeProject("interrompido");
+	mkdirSync(path.join(root, ".workbench"), { recursive: true });
+	// Foto de um run que morreu (pid inexistente) antes de existir .workbench.json.
+	writeFileSync(path.join(root, ".workbench/run-morto.json"), JSON.stringify({ runId: "morto", pid: 4194303, configExisted: false, gits: [".git"] }));
+	writeFileSync(path.join(root, ".workbench.json"), '{"sandbox":"workspace-write"}\n');
+	const m = await faux([fauxAssistantMessage([fauxText("ok")])]);
+	const r = await runStep({ ...m, projectDir: root, id: "brainstorm", note: "ideia" });
+	const events = readFileSync(r.auditPath, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+	const v = events.filter((e) => e.event === "violation");
+	assert.equal(v.length, 1, "a configuração plantada vira violation na auditoria");
+	assert.equal(v[0].path, ".workbench.json");
+	assert.ok(!existsSync(path.join(root, ".workbench.json")), "e não é lida");
+});

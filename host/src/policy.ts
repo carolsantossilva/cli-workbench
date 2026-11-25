@@ -1,11 +1,30 @@
 // Checagens puras de caminho e redação de segredos (base: spikes/pi-host/policy.ts).
 import { lstatSync, realpathSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { EffectiveScope } from "./sandbox-profiles.ts";
 
 // hard: nunca pode ser liberado (sensível, fora da raiz, config/.git).
 // soft: só o perfil não cobre; pode virar pergunta ao usuário.
 export type Decision = { allow: true; rel: string } | { allow: false; reason: string; hard: boolean; rel?: string };
+
+/**
+ * A raiz do projeto não pode ser a home nem um diretório acima dela: o sandbox esconde a
+ * home, mas monta a raiz de volta, e com ela ~/.ssh, ~/.aws e ~/.config ficariam visíveis.
+ */
+export function assertProjectRoot(root: string): void {
+	const realRoot = realpathSync(root);
+	let home: string;
+	try {
+		home = realpathSync(os.homedir());
+	} catch {
+		return;
+	}
+	const rel = path.relative(realRoot, home);
+	if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
+		throw new Error(`o projeto não pode ser a home nem um diretório que a contém (${realRoot}); use a pasta do projeto`);
+	}
+}
 
 // Resolve um caminho vindo de uma ferramenta para um caminho relativo à raiz,
 // seguindo symlinks do ancestral existente mais próximo.

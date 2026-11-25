@@ -99,3 +99,10 @@ test("checa o projeto, mas só depois de saber o comando", () => {
 	assert.match(wb("status", "-C", file).err, /^o projeto precisa ser um diretório: /);
 	assert.match(wb("nada", "-C", missing).err, /^comando desconhecido "nada"/);
 });
+
+test("recusa a home como projeto", () => {
+	const casa = project("casa");
+	const r = spawnSync(process.execPath, [CLI, "status", "-C", casa], { encoding: "utf8", env: { ...process.env, HOME: casa, NO_COLOR: "1", WB_NO_INPUT: "1" } });
+	assert.equal(r.status, 1);
+	assert.match(r.stderr, /não pode ser a home/);
+});
