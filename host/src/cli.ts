@@ -62,11 +62,13 @@ ${COMMON_OPTIONS}
      wb hooks status
 
 Review antes do push para os agentes usados fora do wb (Claude Code e Codex).
-install busca a main de origin, copia o script dela para ~/.local/share/workbench/hooks/
-e aponta os hooks PreToolUse de ~/.claude/settings.json e ~/.codex/hooks.json para a
-cópia, trocando hooks de review antigos e guardando um backup de cada arquivo alterado.
 O que vale é a main: editar o checkout, em qualquer branch, não muda a guarda.
-status compara a cópia com a main de origin e mostra para onde cada agente aponta.
+
+  - install   busca a main de origin, copia o script dela para
+              ~/.local/share/workbench/hooks/ e aponta os hooks PreToolUse de
+              ~/.claude/settings.json e ~/.codex/hooks.json para a cópia, trocando
+              hooks de review antigos e guardando um backup de cada arquivo alterado
+  - status    compara a cópia com a main de origin e mostra para onde cada agente aponta
 
   --local   instala a versão do checkout (para testar uma mudança antes do merge)`,
 	scope: `uso: wb scope [-C <dir>] [-s <sandbox>]\n\n${COMMON_OPTIONS}\n  -s, --sandbox <nome>       ${SANDBOX_NAMES.join("|")}`,
