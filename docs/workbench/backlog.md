@@ -5,7 +5,7 @@ Lista local e temporária de melhorias candidatas para a Workbench, antes de ser
 ## Templates básicos executáveis para mobile, web e API/server
 
 - **Estado:** ideia não refinada.
-- **Intenção:** avaliar a evolução do scaffold de `workbench new` para incluir templates básicos executáveis para o app mobile React Native/Expo, a aplicação web React e a API/server em Go.
+- **Intenção:** avaliar a evolução dos templates do antigo scaffold `workbench new` (hoje em `templates/`, para um futuro `wb new`) para incluir templates básicos executáveis para o app mobile React Native/Expo, a aplicação web React e a API/server em Go.
 - **Contexto:** hoje o scaffold fornece a estrutura do monorepo, contratos e instruções para agentes, mas não gera código-fonte nem projetos executáveis.
 - **Em aberto:** o que significa “básico executável” em cada área; frameworks e versões; comandos e verificações; como tratar instalação/download de dependências; module path Go; e se há necessidade de código compartilhado.
 - **Próximo passo quando selecionada:** refinar a ideia nos workflows de brainstorm, grill-me e design antes de criar plano ou alterar o scaffold.
