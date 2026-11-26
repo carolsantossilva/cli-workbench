@@ -102,7 +102,15 @@ Em todos os sandboxes vale o seguinte:
 - `deny`: globs negados além dos sempre negados.
 - `write`: globs graváveis a mais, por sandbox.
 
-As chaves antigas em português (`perfil`, `negar`, `perfis`) dão erro com a indicação das novas.
+As chaves antigas em português (`perfil`, `negar`, `perfis`) dão erro com a indicação das novas. Para habilitar a ferramenta Pi de consulta da wiki neste projeto, use `"kbAi": { "wiki": true }`; sem opt-in a ferramenta não é registrada.
+
+Agentes externos ao `wb` podem receber orientação por projeto adicionando manualmente ao `AGENTS.md`:
+
+```md
+Para consultar a base de conhecimento, use `wb wiki` (veja `wb wiki --help`).
+```
+
+Essa linha é orientação, não uma barreira técnica: fora do `wb`, nada impede o agente de tentar ler `raw/` diretamente. O serviço `wb wiki` consulta apenas `wiki/`.
 
 ## O que a Workbench garante
 

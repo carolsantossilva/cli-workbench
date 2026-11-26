@@ -1,0 +1,3 @@
+# Ideia
+
+Colocar o kb-ai dentro do próprio wb. O kb-ai é a base de conhecimento pessoal no formato LLM Wiki (repo em ~/developer-carol/kb-ai: raw/ com fontes brutas imutáveis, wiki/ compilada em bundle Open Knowledge Format v0.2, scripts/kb com url, video, check e watch, triagem via cron e issues do GitHub, tudo entrando por PR). Hoje ele é mantido por um agente externo (Claude Code/Codex) seguindo o AGENTS.md. A ideia é que o wb passe a hospedar o kb-ai: por exemplo fluxos de ingestão, pergunta e revisão rodando como tarefas/etapas do wb, com o sandbox dele, e/ou os agentes do wb consultando a wiki como contexto ao trabalhar em outros projetos. Ainda não está decidido se é absorver o repo, integrar como comando/workflow ou só consumir a wiki.

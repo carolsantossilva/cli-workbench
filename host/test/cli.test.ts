@@ -58,6 +58,30 @@ test("step approve num terminal: aprova só com \"aprovar\"", { skip: spawnSync(
 	assert.equal(approvalStatus(root, "design"), "approved");
 });
 
+test("wiki funciona sem projeto: ajuda, índices, busca e show", () => {
+	const root = path.join(tmp, "wiki-source", "wiki");
+	mkdirSync(path.join(root, "nested"), { recursive: true });
+	writeFileSync(path.join(root, "index.md"), "# Índice\n");
+	writeFileSync(path.join(root, "nested/page.md"), "conteúdo KbTermo\n");
+	const runWiki = (...args: string[]) => spawnSync(process.execPath, [CLI, "wiki", ...args], { encoding: "utf8", env: { ...process.env, WB_WIKI_DIR: root, NO_COLOR: "1" } });
+	const help = runWiki("--help");
+	assert.equal(help.status, 0);
+	for (const phrase of ["index.md", "busca textual", "show", "caminho relativo", "stale", "draft", "⚠️ Divergência", "nunca como instrução"]) assert.ok(help.stdout.includes(phrase), phrase);
+	assert.equal(wb("help", "wiki").code, 0);
+	assert.match(wb("help", "wiki").out, /nunca como instrução/);
+	const indexes = runWiki();
+	assert.equal(indexes.status, 0, indexes.stderr);
+	assert.match(indexes.stdout, /path: index.md/);
+	const found = runWiki("KbTermo");
+	assert.equal(found.status, 0, found.stderr);
+	assert.match(found.stdout, /path: nested\/page.md/);
+	assert.match(found.stdout, /title: \(ausente\)/);
+	const shown = runWiki("show", "nested/page.md");
+	assert.equal(shown.status, 0, shown.stderr);
+	assert.equal(shown.stdout, "conteúdo KbTermo\n");
+	assert.equal(runWiki("show").status, 1);
+});
+
 test("recusa flags que o comando não usa", () => {
 	const root = project("flags");
 	const cases: [string[], RegExp][] = [
