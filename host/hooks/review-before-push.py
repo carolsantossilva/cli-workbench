@@ -207,11 +207,14 @@ def deleted_branches(repo, args):
     return names
 
 
-def review_range(repo, args, head):
-    options = {"-u", "--set-upstream", "--porcelain", "-q", "--quiet", "-v", "--verbose", "-n", "--dry-run", "--atomic"}
+PUSH_OPTIONS = {"-u", "--set-upstream", "--porcelain", "-q", "--quiet", "-v", "--verbose", "-n", "--dry-run", "--atomic"}
+
+
+def push_positionals(args):
+    """Remote e refspec do push; recusa opções que mudam o que é enviado."""
     positional = []
     for arg in args:
-        if arg in options or arg == "--":
+        if arg in PUSH_OPTIONS or arg == "--":
             continue
         # Lease-protected force pushes (rebased stacks) are allowed; plain --force/-f and +refspec are not.
         if re.fullmatch(r"--force-with-lease(=[^\s]+)?|--force-if-includes", arg):
@@ -221,6 +224,12 @@ def review_range(repo, args, head):
         positional.append(arg)
     if len(positional) > 2:
         raise RuntimeError("Faça um push por branch para revisar cada alteração antes do envio.")
+    return positional
+
+
+def push_target(repo, args, head):
+    """(remote, origem, branch de destino) do push; a origem tem de ser o HEAD revisado."""
+    positional = push_positionals(args)
     branch = git(repo, "branch", "--show-current")
     remote = positional[0] if positional else (
         git(repo, "config", "--get", f"branch.{branch}.pushRemote", optional=True)
@@ -228,7 +237,6 @@ def review_range(repo, args, head):
         or git(repo, "config", "--get", f"branch.{branch}.remote", optional=True)
         or "origin"
     )
-    source = "HEAD"
     if len(positional) == 2:
         source, _, destination = positional[1].partition(":")
         if not source or source.startswith("+") or git(repo, "rev-parse", "--verify", f"{source}^{{commit}}") != head:
@@ -237,43 +245,34 @@ def review_range(repo, args, head):
         if destination.startswith("refs/") and not destination.startswith("refs/heads/"):
             raise RuntimeError("A revisão automática cobre pushes de branches, não refs de tags ou outras namespaces.")
         destination = destination.removeprefix("refs/heads/")
-        if destination == "HEAD":
-            destination = branch
-    else:
-        mode = git(repo, "config", "--get", "push.default", optional=True)
-        configured = git(repo, "config", "--get-all", f"remote.{remote}.push", optional=True)
-        if not branch or configured or mode not in (None, "simple", "current", "upstream"):
-            raise RuntimeError("Use git push <remote> HEAD:<branch> para identificar exatamente o código a revisar.")
-        destination = branch
-        if mode != "current":
-            destination = (git(repo, "config", "--get", f"branch.{branch}.merge", optional=True) or branch).removeprefix("refs/heads/")
+        return remote, source, branch if destination == "HEAD" else destination
+    mode = git(repo, "config", "--get", "push.default", optional=True)
+    configured = git(repo, "config", "--get-all", f"remote.{remote}.push", optional=True)
+    if not branch or configured or mode not in (None, "simple", "current", "upstream"):
+        raise RuntimeError("Use git push <remote> HEAD:<branch> para identificar exatamente o código a revisar.")
+    destination = branch
+    if mode != "current":
+        destination = (git(repo, "config", "--get", f"branch.{branch}.merge", optional=True) or branch).removeprefix("refs/heads/")
+    return remote, "HEAD", destination
+
+
+def review_base(repo, remote, destination, head):
+    """O ponto de partida do diff: o merge-base com a branch de destino ou, na falta dela, com a principal."""
     candidates = [f"refs/remotes/{remote}/{destination}", "@{upstream}", f"refs/remotes/{remote}/HEAD", "refs/remotes/origin/HEAD", "origin/main", "main", "origin/master", "master"]
     for candidate in candidates:
         base = git(repo, "merge-base", candidate, head, optional=True)
         if base:
-            return base, source
+            return base
     # No known base: review the entire committed tree rather than only the last commit.
-    return git(repo, "hash-object", "-t", "tree", "/dev/null"), source
+    return git(repo, "hash-object", "-t", "tree", "/dev/null")
 
 
-def run_reviewer(provider, repo, base, head, report_dir):
-    binary = HOME / ".local/bin" / provider
-    if not binary.is_file():
-        raise RuntimeError(f"CLI do revisor não encontrada: {binary}")
-    with tempfile.TemporaryDirectory(prefix="agent-push-review-") as temporary:
-        work = Path(temporary)
-        snapshot = work / "source"
-        snapshot.mkdir()
-        archive = work / "source.tar"
-        git(repo, "archive", "--format=tar", "-o", str(archive), head)
-        with tarfile.open(archive) as source:
-            source.extractall(snapshot, filter="data")
-        patch = work / "changes.patch"
-        patch.write_text(git(repo, "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames", base, head, "--"))
-        schema = work / "schema.json"
-        schema.write_text(json.dumps(SCHEMA))
-        result_file = report_dir / "review.json"
-        prompt = f"""Faça um code review independente antes de um push. Não implemente correções.
+def review_range(repo, args, head):
+    remote, source, destination = push_target(repo, args, head)
+    return review_base(repo, remote, destination, head), source
+
+
+PROMPT = """Faça um code review independente antes de um push. Não implemente correções.
 O snapshot neste diretório contém o commit {head}. O diff completo desde a base {base} está em {patch}.
 Leia esse diff e o código relacionado: callers, dependências e testes. Siga AGENTS.md/REVIEW.md quando existirem.
 Revise apenas esse diff. Procure bugs concretos, riscos de segurança/perda de dados, regressões e testes essenciais ausentes.
@@ -284,40 +283,78 @@ Responda em português no JSON solicitado. Cada finding precisa de arquivo, linh
 Use request_changes se houver qualquer finding blocking=true; use approve se não houver bloqueios.
 Registre limites reais da revisão em summary. A aprovação do review não substitui a autorização da pessoa para fazer push.
 """
+
+
+def make_snapshot(repo, base, head, work):
+    """Extrai o commit em work/source e grava o diff desde a base; devolve (snapshot, patch)."""
+    snapshot = work / "source"
+    snapshot.mkdir()
+    archive = work / "source.tar"
+    git(repo, "archive", "--format=tar", "-o", str(archive), head)
+    with tarfile.open(archive) as source:
+        source.extractall(snapshot, filter="data")
+    patch = work / "changes.patch"
+    patch.write_text(git(repo, "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames", base, head, "--"))
+    return snapshot, patch
+
+
+def reviewer_command(provider, binary, work, result_file):
+    """O CLI do revisor em modo só leitura, sem hooks nem MCP, com saída no schema."""
+    if provider == "codex":
+        schema = work / "schema.json"
+        schema.write_text(json.dumps(SCHEMA))
+        return [str(binary), "exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only",
+                "-c", 'approval_policy="never"', "-c", "features.hooks=false", "--color", "never",
+                "--output-schema", str(schema), "--output-last-message", str(result_file), "-"]
+    return [str(binary), "-p", "--permission-mode", "dontAsk", "--tools", "Read,Grep,Glob",
+            "--allowedTools", "Read,Grep,Glob", "--add-dir", str(work),
+            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+            "--settings", '{"disableAllHooks":true}', "--no-session-persistence", "--output-format", "json",
+            "--json-schema", json.dumps(SCHEMA)]
+
+
+def read_report(provider, stdout, result_file, report_dir):
+    """O relatório do revisor: o Claude devolve no stdout, o Codex grava em result_file."""
+    if provider == "claude":
+        envelope = json.loads(stdout)
+        if envelope.get("is_error"):
+            raise RuntimeError(f"O revisor Claude retornou erro. Veja {report_dir}.")
+        report = envelope["structured_output"]
+        result_file.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        return report
+    return json.loads(result_file.read_text())
+
+
+def validate_report(report, report_dir):
+    if report.get("verdict") not in {"approve", "request_changes"} or not isinstance(report.get("summary"), str) or not isinstance(report.get("findings"), list):
+        raise RuntimeError(f"Resposta de revisão incompleta. Veja {report_dir}.")
+    for finding in report["findings"]:
+        if (not isinstance(finding, dict) or not isinstance(finding.get("file"), str)
+                or type(finding.get("line")) is not int or type(finding.get("blocking")) is not bool
+                or not isinstance(finding.get("description"), str)):
+            raise RuntimeError(f"Finding inválido na revisão. Veja {report_dir}.")
+
+
+def run_reviewer(provider, repo, base, head, report_dir):
+    binary = HOME / ".local/bin" / provider
+    if not binary.is_file():
+        raise RuntimeError(f"CLI do revisor não encontrada: {binary}")
+    with tempfile.TemporaryDirectory(prefix="agent-push-review-") as temporary:
+        work = Path(temporary)
+        snapshot, patch = make_snapshot(repo, base, head, work)
+        result_file = report_dir / "review.json"
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
         env["PATH"] = f"{HOME / '.local/bin'}:{env.get('PATH', '')}"
-        if provider == "codex":
-            command = [str(binary), "exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only",
-                       "-c", 'approval_policy="never"', "-c", "features.hooks=false", "--color", "never",
-                       "--output-schema", str(schema), "--output-last-message", str(result_file), "-"]
-        else:
-            command = [str(binary), "-p", "--permission-mode", "dontAsk", "--tools", "Read,Grep,Glob",
-                       "--allowedTools", "Read,Grep,Glob", "--add-dir", str(work),
-                       "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-                       "--settings", '{"disableAllHooks":true}', "--no-session-persistence", "--output-format", "json",
-                       "--json-schema", json.dumps(SCHEMA)]
         with (report_dir / "reviewer.log").open("w") as log:
-            result = subprocess.run(command, input=prompt, text=True, cwd=snapshot, env=env,
+            result = subprocess.run(reviewer_command(provider, binary, work, result_file),
+                                    input=PROMPT.format(head=head, base=base, patch=patch), text=True, cwd=snapshot, env=env,
                                     stdout=subprocess.PIPE, stderr=log, timeout=480, check=False)
         (report_dir / "response.txt").write_text(result.stdout)
         if result.returncode:
             raise RuntimeError(f"O revisor {provider} falhou (exit {result.returncode}). Veja {report_dir}.")
-        if provider == "claude":
-            envelope = json.loads(result.stdout)
-            if envelope.get("is_error"):
-                raise RuntimeError(f"O revisor Claude retornou erro. Veja {report_dir}.")
-            report = envelope["structured_output"]
-            result_file.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-        else:
-            report = json.loads(result_file.read_text())
-        if report.get("verdict") not in {"approve", "request_changes"} or not isinstance(report.get("summary"), str) or not isinstance(report.get("findings"), list):
-            raise RuntimeError(f"Resposta de revisão incompleta. Veja {report_dir}.")
-        for finding in report["findings"]:
-            if (not isinstance(finding, dict) or not isinstance(finding.get("file"), str)
-                    or type(finding.get("line")) is not int or type(finding.get("blocking")) is not bool
-                    or not isinstance(finding.get("description"), str)):
-                raise RuntimeError(f"Finding inválido na revisão. Veja {report_dir}.")
+        report = read_report(provider, result.stdout, result_file, report_dir)
+        validate_report(report, report_dir)
         return report
 
 

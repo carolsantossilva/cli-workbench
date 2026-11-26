@@ -127,10 +127,9 @@ const sha256 = (data: Buffer | string) => createHash("sha256").update(data).dige
 /** Algum hook de review antes do push, deste wb ou de uma instalação antiga. */
 const isReviewHook = (h: HookCommand) => typeof h.command === "string" && h.command.includes(REVIEW_HOOK);
 
-function readConfig(file: string): HookConfig {
-	if (!existsSync(file)) return {};
-	const raw = readFileSync(file, "utf8");
-	if (raw.trim() === "") return {};
+/** A config do agente; `raw` evita ler de novo um arquivo já lido. */
+function readConfig(file: string, raw = existsSync(file) ? readFileSync(file, "utf8") : undefined): HookConfig {
+	if (raw === undefined || raw.trim() === "") return {};
 	try {
 		return JSON.parse(raw) as HookConfig;
 	} catch (e) {
@@ -159,12 +158,14 @@ export interface InstallOptions {
 	source?: HookSource;
 }
 
+type AgentInstallResult = "instalado" | "já estava" | "sem o agente";
+
 export interface InstallResult {
 	hook: string;
 	from: "main" | "local";
 	commit: string;
 	dirty?: boolean;
-	agents: { name: AgentName; config: string; result: "instalado" | "já estava" | "sem o agente"; backup?: string }[];
+	agents: { name: AgentName; config: string; result: AgentInstallResult; backup?: string }[];
 }
 
 function scriptToInstall(source: HookSource, local: boolean): { content: Buffer; from: Installed["from"]; commit: string; dirty?: boolean } {
@@ -187,26 +188,24 @@ export function installHooks(home = os.homedir(), { local = false, source = defa
 	writeAtomic(metaPath(home), `${JSON.stringify(installed, null, 2)}\n`, 0o600);
 
 	const result: InstallResult = { hook, from: script.from, commit: script.commit, dirty: script.dirty, agents: [] };
-	for (const a of agents(home)) {
-		if (!existsSync(a.dir)) {
-			result.agents.push({ name: a.name, config: a.config, result: "sem o agente" });
-			continue;
-		}
-		const before = existsSync(a.config) ? readFileSync(a.config, "utf8") : undefined;
-		const cfg = withReviewHook(readConfig(a.config), hookCommand(home, a.name));
-		if (before !== undefined && JSON.stringify(JSON.parse(before.trim() || "{}")) === JSON.stringify(cfg)) {
-			result.agents.push({ name: a.name, config: a.config, result: "já estava" });
-			continue;
-		}
-		let backup: string | undefined;
-		if (before !== undefined) {
-			backup = `${a.config}.antes-wb-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-			writeFileSync(backup, before, { mode: 0o600 });
-		}
-		writeAtomic(a.config, `${JSON.stringify(cfg, null, 2)}\n`, 0o600);
-		result.agents.push({ name: a.name, config: a.config, result: "instalado", backup });
-	}
+	for (const a of agents(home)) result.agents.push({ name: a.name, config: a.config, ...configureAgent(a, hookCommand(home, a.name)) });
 	return result;
+}
+
+/** Aponta o PreToolUse do agente para a cópia; backup da config anterior quando ela muda. */
+function configureAgent(agent: Agent, command: string): { result: AgentInstallResult; backup?: string } {
+	if (!existsSync(agent.dir)) return { result: "sem o agente" };
+	const before = existsSync(agent.config) ? readFileSync(agent.config, "utf8") : undefined;
+	const current = readConfig(agent.config, before);
+	const cfg = withReviewHook(current, command);
+	if (before !== undefined && JSON.stringify(current) === JSON.stringify(cfg)) return { result: "já estava" };
+	let backup: string | undefined;
+	if (before !== undefined) {
+		backup = `${agent.config}.antes-wb-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+		writeFileSync(backup, before, { mode: 0o600 });
+	}
+	writeAtomic(agent.config, `${JSON.stringify(cfg, null, 2)}\n`, 0o600);
+	return { result: "instalado", backup };
 }
 
 export type CopyState =
@@ -231,35 +230,42 @@ export interface HookStatus {
 	agents: { name: AgentName; state: "ativo" | "ausente" | "aponta para outro script" | "sem o agente"; commands: string[] }[];
 }
 
+type AgentState = HookStatus["agents"][number]["state"];
+
 export function hooksStatus(home = os.homedir(), { source = defaultSource() }: { source?: HookSource } = {}): HookStatus {
 	const hook = installedHookPath(home);
 	const installed = readInstalled(home);
 	const fetched = fetchMain(source.repo);
 	const main = mainVersion(source);
-	let copy: CopyState;
-	if (!existsSync(hook)) copy = "ausente";
-	else if (!installed) copy = "instalada por uma versão antiga do wb";
-	else if (sha256(readFileSync(hook)) !== installed.sha256) copy = "editada depois de instalada";
-	else if (installed.from === "local") copy = "do checkout local, não da main";
-	else if (!main) copy = "o script não está mais na main";
-	else if (sha256(main.content) !== installed.sha256) copy = "desatualizada: a main tem outra versão";
-	else copy = "ok";
 	return {
 		hook,
-		copy,
+		copy: copyState(hook, installed, main?.content),
 		commit: installed?.commit,
 		dirty: installed?.dirty,
 		main: main?.commit,
 		fetched,
-		agents: agents(home).map((a) => {
-			if (!existsSync(a.dir)) return { name: a.name, state: "sem o agente", commands: [] };
-			const commands = (readConfig(a.config).hooks?.PreToolUse ?? [])
-				.flatMap((g) => g.hooks ?? [])
-				.filter(isReviewHook)
-				.map((h) => String(h.command));
-			const ours = commands.filter((c) => c === hookCommand(home, a.name));
-			const state = commands.length === 0 ? "ausente" : ours.length === commands.length ? "ativo" : "aponta para outro script";
-			return { name: a.name, state, commands };
-		}),
+		agents: agents(home).map((a) => ({ name: a.name, ...agentStatus(a, hookCommand(home, a.name)) })),
 	};
+}
+
+/** Compara a cópia instalada com o que foi registrado na instalação e com a main. */
+function copyState(hook: string, installed: Installed | undefined, mainContent: Buffer | undefined): CopyState {
+	if (!existsSync(hook)) return "ausente";
+	if (!installed) return "instalada por uma versão antiga do wb";
+	if (sha256(readFileSync(hook)) !== installed.sha256) return "editada depois de instalada";
+	if (installed.from === "local") return "do checkout local, não da main";
+	if (!mainContent) return "o script não está mais na main";
+	if (sha256(mainContent) !== installed.sha256) return "desatualizada: a main tem outra versão";
+	return "ok";
+}
+
+/** Os hooks de review na config do agente e se todos apontam para a cópia. */
+function agentStatus(agent: Agent, command: string): { state: AgentState; commands: string[] } {
+	if (!existsSync(agent.dir)) return { state: "sem o agente", commands: [] };
+	const commands = (readConfig(agent.config).hooks?.PreToolUse ?? [])
+		.flatMap((g) => g.hooks ?? [])
+		.filter(isReviewHook)
+		.map((h) => String(h.command));
+	if (commands.length === 0) return { state: "ausente", commands };
+	return { state: commands.every((c) => c === command) ? "ativo" : "aponta para outro script", commands };
 }
