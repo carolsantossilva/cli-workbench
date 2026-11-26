@@ -1,8 +1,6 @@
 // Os sandboxes prontos (perfis de permissão): cada execução escolhe um, e o projeto só
 // declara exceções no .workbench.json (project-config.ts). O sandbox.ts aplica isso no bwrap.
 // Nomes seguem o --sandbox do Codex CLI onde há equivalente (read-only, workspace-write).
-import type { ProjectConfig } from "./project-config.ts";
-
 export type SandboxName = "read-only" | "docs-only" | "workspace-write";
 
 export interface SandboxProfile {
@@ -61,6 +59,16 @@ const BUILTIN: Record<SandboxName, SandboxProfile> = {
 
 export const SANDBOX_NAMES = Object.keys(BUILTIN) as SandboxName[];
 
+/** Ajustes do projeto aos sandboxes prontos (o .workbench.json os lê em project-config.ts). */
+export interface SandboxOverrides {
+	/** Sandbox padrão do `wb run` neste projeto. */
+	sandbox?: SandboxName;
+	/** Globs negados além dos sempre negados. */
+	deny?: string[];
+	/** Globs graváveis a mais, por sandbox. */
+	write?: Partial<Record<SandboxName, string[]>>;
+}
+
 export interface EffectiveScope {
 	profile: SandboxProfile;
 	read: string[];
@@ -69,7 +77,7 @@ export interface EffectiveScope {
 	writeDeny: string[];
 }
 
-export function resolveScope(name: SandboxName | undefined, cfg: ProjectConfig): EffectiveScope {
+export function resolveScope(name: SandboxName | undefined, cfg: SandboxOverrides): EffectiveScope {
 	const chosen = name ?? cfg.sandbox ?? "read-only";
 	const profile = BUILTIN[chosen];
 	if (!profile) throw new Error(`sandbox desconhecido "${chosen}" (use ${SANDBOX_NAMES.join(", ")})`);
