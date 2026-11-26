@@ -106,6 +106,6 @@ Decididos em 2026-11-24, antes do aceite:
 ## Referências
 
 - `design.md` §1, §7, §8 e `docs/workbench/plan.md`, na versão Codex-first (no histórico do git)
-- `docs/workbench/pi-host/brief.md` e `decisions.md`
+- `docs/workbench/pi-host/brief.md` (no histórico do git) e [`decisions.md`](../workbench/pi-host/decisions.md)
 - [`host/README.md`](../../host/README.md)
 - [Pi](https://pi.dev/) · [Armin Ronacher sobre o Pi e o OpenClaw](https://lucumr.pocoo.org/2026/1/31/pi/)
