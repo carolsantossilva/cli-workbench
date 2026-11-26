@@ -7,6 +7,7 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { detectCommands } from "./detect.ts";
 import { type ApprovalAnswer, type ApprovalRequest, DEFAULT_MODEL, DEFAULT_THINKING, type Decision, describeScope, type RunResult, runTask, THINKING_LEVELS, type TokenUsage } from "./host.ts";
+import { assertProjectRoot } from "./policy.ts";
 import { resolveScope, SANDBOX_NAMES } from "./sandbox-profiles.ts";
 import { loadProjectConfig } from "./project-config.ts";
 import { findDeniedFiles, sandboxAvailable } from "./sandbox.ts";
@@ -174,6 +175,7 @@ function projectRoot(dir: string): string {
 	const st = statSync(dir, { throwIfNoEntry: false });
 	if (!st) throw new Error(`projeto não encontrado: ${dir}`);
 	if (!st.isDirectory()) throw new Error(`o projeto precisa ser um diretório: ${dir}`);
+	assertProjectRoot(dir);
 	return realpathSync(dir);
 }
 

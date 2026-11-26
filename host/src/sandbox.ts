@@ -4,7 +4,7 @@ import { existsSync, readdirSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { workbenchDir } from "./workdir.ts";
-import { matchesAny } from "./policy.ts";
+import { assertProjectRoot, matchesAny } from "./policy.ts";
 import { ALWAYS_DENY } from "./sandbox-profiles.ts";
 
 // Ferramentas instaladas na home que os comandos do projeto costumam precisar (só leitura).
@@ -60,6 +60,7 @@ export function findDeniedFiles(root: string, deny: readonly string[], maxDepth 
 }
 
 export function buildSandboxArgs(root: string, cwd: string, deny: readonly string[], writable = true): string[] {
+	assertProjectRoot(root);
 	const realRoot = realpathSync(root);
 	const home = os.homedir();
 	const args = [

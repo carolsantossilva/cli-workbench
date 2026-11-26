@@ -20,9 +20,9 @@ import { type DetectedCommand, detectCommands } from "./detect.ts";
 import { workbenchExtension } from "./extension.ts";
 import { type ApprovalAnswer, type ApprovalRequest, createGate, type Decision } from "./gate.ts";
 import { beginGuard, endGuard, recoverInterrupted, type Snapshot } from "./guard.ts";
-import { redactSecrets } from "./policy.ts";
+import { assertProjectRoot, redactSecrets } from "./policy.ts";
 import { type EffectiveScope, type SandboxName, resolveScope } from "./sandbox-profiles.ts";
-import { loadProjectConfig } from "./project-config.ts";
+import { loadProjectConfig, type ProjectConfig } from "./project-config.ts";
 import { looksLikeRefusal, rewritePrompt } from "./refusal.ts";
 import { sandboxAvailable, wrapCommand } from "./sandbox.ts";
 import { type Audit, emptyUsage, newRunId, openAudit, recordUsage, type TokenUsage } from "./usage.ts";
@@ -48,8 +48,12 @@ export interface RunOptions {
 	onDecision?: (d: Decision) => void;
 	/** Pergunta ao usuário sobre ações fora do sandbox. Sem isso, tudo fora do sandbox é negado. */
 	ask?: (req: ApprovalRequest) => Promise<ApprovalAnswer>;
-	/** Escopo pronto (ex.: de um workflow) no lugar do sandbox. */
-	scope?: EffectiveScope;
+	/**
+	 * Escopo pronto no lugar do sandbox, ou montado a partir do `.workbench.json` (ex.: de
+	 * um workflow). A função roda depois da limpeza de um run interrompido, para que a
+	 * auditoria registre o que foi posto de lado e uma configuração plantada não seja lida.
+	 */
+	scope?: EffectiveScope | ((cfg: ProjectConfig) => EffectiveScope);
 	/** Habilita a ferramenta `ask_user`: o agente faz uma pergunta e recebe a resposta do usuário. */
 	askUser?: (question: string) => Promise<string>;
 	/** Quantas vezes pedir para continuar após uma recusa (padrão 1). */
@@ -115,8 +119,9 @@ export function describeScope(scope: EffectiveScope, commands: DetectedCommand[]
 
 export async function runTask(opts: RunOptions): Promise<RunResult> {
 	const root = realpathSync(opts.projectDir);
+	assertProjectRoot(root);
 	const recovered = recoverInterrupted(root);
-	const scope = opts.scope ?? resolveScope(opts.sandbox, loadProjectConfig(root));
+	const scope = typeof opts.scope === "function" ? opts.scope(loadProjectConfig(root)) : (opts.scope ?? resolveScope(opts.sandbox, loadProjectConfig(root)));
 	const commands = detectCommands(root);
 	if (scope.profile.bash !== "none" && !sandboxAvailable()) {
 		throw new Error(`"${scope.profile.name}" precisa do bubblewrap (bwrap) instalado para rodar comandos em sandbox`);

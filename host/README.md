@@ -79,6 +79,7 @@ Todos os arquivos ficam em `docs/workbench/`. Cada etapa roda numa sessão nova,
 O bash do `workspace-write`:
 - não tem rede;
 - esconde a home (só as ferramentas de `~/.nvm`, `~/go`, `~/.cargo` etc. ficam visíveis, em modo leitura, com credenciais como `~/.cargo/credentials.toml` mascaradas);
+- recusa rodar quando o projeto é a home ou um diretório acima dela (`wb -C ~`), porque montar a raiz traria a home de volta;
 - deixa o sistema em modo leitura;
 - mascara os arquivos sensíveis do projeto com `/dev/null`, inclusive dentro de pastas ocultas como `.config/`;
 - monta `.git/` (e repositórios aninhados, inclusive o arquivo `.git` de submódulos), `.workbench/` e `.workbench.json` só leitura, para o bash não plantar hooks ou `core.fsmonitor` nem forjar a aprovação do design;
@@ -130,7 +131,7 @@ npm run typecheck
 - O sandbox só funciona no Linux (bubblewrap).
 - As ferramentas `read`, `write`, `edit`, `grep`, `find` e `ls` rodam no host, fora do bwrap. A checagem resolve symlinks na hora, mas no `workspace-write` o bash ainda poderia trocar um symlink entre a checagem e a abertura do arquivo (TOCTOU).
 - A guarda de `.git` criado durante o run não olha dentro de `node_modules/` nem abaixo de 12 níveis.
-- `wb scope` e `wb status` também fazem a limpeza de um run interrompido, e nesse caso os eventos `violation` só aparecem no stderr, não na auditoria.
+- `wb scope` também faz a limpeza de um run interrompido, e nesse caso os eventos `violation` só aparecem no stderr, não na auditoria. No `wb run` e no `wb step run` eles entram na auditoria do novo run.
 - Nas toolchains da home, as credenciais são procuradas só até 3 níveis de profundidade, e o `~/.cargo/config.toml` continua visível.
 - A busca de arquivos sensíveis a mascarar pula `node_modules/` e vai até 12 níveis de profundidade. Ela roda antes de cada comando, então um arquivo sensível criado durante o próprio comando não é mascarado.
 - A troca de "evidência" vale só para o seu pedido, não para arquivos do projeto que o agente lê: um documento com a palavra ainda pode causar recusa no meio da execução.

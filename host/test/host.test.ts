@@ -13,7 +13,7 @@ import { dropDeniedLines, redactDeep } from "../src/redact.ts";
 import { rewritePrompt } from "../src/refusal.ts";
 import { beginGuard, endGuard } from "../src/guard.ts";
 import { loadProjectConfig } from "../src/project-config.ts";
-import { matchesAny } from "../src/policy.ts";
+import { assertProjectRoot, matchesAny } from "../src/policy.ts";
 import { ALWAYS_DENY, WRITE_DENY } from "../src/sandbox-profiles.ts";
 import { buildSandboxArgs, sandboxAvailable, wrapCommand } from "../src/sandbox.ts";
 import { saveState } from "../src/workflows.ts";
@@ -613,4 +613,24 @@ test("criação de .workbench tolera outro wb criando ao mesmo tempo; marcador e
 	assert.throws(() => appendInside(path.join(root, ".workbench/runs/x.jsonl"), "{}\n"), /é um symlink/);
 	assert.throws(() => writeInside(path.join(root, ".workbench/run-x.json"), "{}\n"), /é um symlink/);
 	assert.equal(readFileSync(outside, "utf8"), "original\n");
+});
+
+test("a home, ou um diretório acima dela, não pode ser o projeto", () => {
+	const casa = makeProject("casa");
+	mkdirSync(path.join(casa, "proj"), { recursive: true });
+	const old = process.env.HOME;
+	process.env.HOME = casa;
+	try {
+		assert.throws(() => assertProjectRoot(casa), /não pode ser a home/);
+		assert.throws(() => assertProjectRoot(path.dirname(casa)), /não pode ser a home/);
+		assert.throws(() => buildSandboxArgs(casa, casa, ALWAYS_DENY), /não pode ser a home/);
+		assert.doesNotThrow(() => assertProjectRoot(path.join(casa, "proj")));
+		assert.doesNotThrow(() => assertProjectRoot(makeProject("vizinho")), "um irmão da home passa");
+		const pontos = path.join(makeProject("raiz-pontos"), "..user");
+		mkdirSync(pontos);
+		process.env.HOME = pontos;
+		assert.throws(() => assertProjectRoot(path.dirname(pontos)), /não pode ser a home/, 'home "..user" dentro da raiz');
+	} finally {
+		process.env.HOME = old;
+	}
 });

@@ -4,7 +4,6 @@ import { closeSync, constants, existsSync, mkdirSync, openSync, realpathSync, wr
 import path from "node:path";
 import { type RunOptions, type RunResult, runTask } from "./host.ts";
 import { resolveInRoot } from "./policy.ts";
-import { loadProjectConfig } from "./project-config.ts";
 import {
 	type ApprovalStatus,
 	approvalStatus,
@@ -74,7 +73,7 @@ export async function runStep(o: StepRunOptions): Promise<StepRunResult> {
 		...o,
 		projectDir: root,
 		task,
-		scope: stepScope(def, loadProjectConfig(root)),
+		scope: (cfg) => stepScope(def, cfg),
 		askUser: def.asksUser ? o.askUser : undefined,
 	});
 	const after = fileHash(root, def.output);
