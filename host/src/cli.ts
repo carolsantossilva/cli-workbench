@@ -225,7 +225,9 @@ function wikiCommand(args: Args, rest: string[]) {
 	} else if (rest.length === 0) {
 		for (const index of wikiIndexes(root)) console.log(`path: ${index.path}\n${index.content}`);
 	} else {
-		console.log(wikiSearch(root, rest.join(" ")).map(formatWikiRecord).join("\n\n"));
+		const term = rest.join(" ").trim();
+		if (!term) throw new Error(`termo de busca vazio\n\n${HELP.wiki}`);
+		console.log(wikiSearch(root, term).map(formatWikiRecord).join("\n\n") || "(nenhum resultado)");
 	}
 }
 

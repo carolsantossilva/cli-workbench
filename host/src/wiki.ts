@@ -38,7 +38,9 @@ function pageFiles(root: string): string[] {
 		try { canonical = realpathSync(dir); } catch { return; }
 		if (!inside(root, canonical) || visited.has(canonical)) return;
 		visited.add(canonical);
-		for (const name of readdirSync(canonical).sort()) {
+		let names: string[];
+		try { names = readdirSync(canonical).sort(); } catch { return; } // pasta ilegível: fica de fora, o resto segue
+		for (const name of names) {
 			const file = path.join(canonical, name);
 			let real: string;
 			let st;
@@ -111,7 +113,9 @@ export function wikiIndexes(root: string): { path: string; content: string }[] {
 	const indexes = pageFiles(canonical).filter((f) => path.basename(f) === "index.md");
 	// O índice raiz é o ponto de entrada: vem antes dos índices das pastas.
 	indexes.sort((a, b) => Number(relative(canonical, b) === "index.md") - Number(relative(canonical, a) === "index.md"));
-	return indexes.map((f) => ({ path: relative(canonical, f), content: readFileSync(f, "utf8") }));
+	return indexes.flatMap((f) => {
+		try { return [{ path: relative(canonical, f), content: readFileSync(f, "utf8") }]; } catch { return []; }
+	});
 }
 
 export function formatWikiRecord(record: WikiRecord): string {

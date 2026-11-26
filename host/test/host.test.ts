@@ -635,7 +635,7 @@ test("a home, ou um diretório acima dela, não pode ser o projeto", () => {
 	}
 });
 
-test("ferramenta wiki: só com opt-in no .workbench.json, lê wiki/ e nunca raw/", async () => {
+test("ferramenta wiki: só com opt-in no .workbench.json, lê wiki/ e nunca raw/", async (t) => {
 	const kb = path.join(tmp, "kb-ai");
 	mkdirSync(path.join(kb, "wiki/conceitos"), { recursive: true });
 	mkdirSync(path.join(kb, "raw"), { recursive: true });
@@ -644,7 +644,7 @@ test("ferramenta wiki: só com opt-in no .workbench.json, lê wiki/ e nunca raw/
 	writeFileSync(path.join(kb, "raw/bruto.md"), "AGULHA-RAW\n");
 	const previous = process.env.WB_WIKI_DIR;
 	process.env.WB_WIKI_DIR = path.join(kb, "wiki");
-	after(() => (previous === undefined ? delete process.env.WB_WIKI_DIR : (process.env.WB_WIKI_DIR = previous)));
+	t.after(() => (previous === undefined ? delete process.env.WB_WIKI_DIR : (process.env.WB_WIKI_DIR = previous)));
 
 	const calls = () => [
 		fauxAssistantMessage(

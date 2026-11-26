@@ -77,7 +77,7 @@ function registerAskUser(pi: ExtensionAPI, askUser: (question: string) => Promis
 
 /** Toda chamada passa por aqui antes de acontecer; ferramenta desconhecida é negada. */
 export function decideToolCall(tool: string, input: Record<string, unknown>, { scope, gate, askUser, wikiEnabled }: ExtensionOptions) {
-	const target = String(input.path ?? input.command ?? input.question ?? ".");
+	const target = String(input.path ?? input.command ?? input.question ?? input.query ?? input.action ?? ".");
 	switch (tool) {
 		case "read":
 		case "grep":

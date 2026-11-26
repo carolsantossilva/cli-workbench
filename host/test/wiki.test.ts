@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
@@ -84,4 +84,17 @@ test("config kbAi malformada ou com chaves desconhecidas é erro", () => {
 	}
 	writeFileSync(path.join(root, ".workbench.json"), '{"kbAi":{"wiki":true}}');
 	assert.equal(loadProjectConfig(root).kbAi?.wiki, true);
+});
+
+test("pasta ilegível fica de fora sem derrubar busca e índices", { skip: process.getuid?.() === 0 && "root lê tudo" }, () => {
+	const root = wiki("ilegivel");
+	mkdirSync(path.join(root, "trancada"));
+	writeFileSync(path.join(root, "trancada/index.md"), "# Trancada Needle\n");
+	chmodSync(path.join(root, "trancada"), 0o000);
+	try {
+		assert.deepEqual(wikiIndexes(root).map((i) => i.path), ["index.md", "alfa/index.md", "sub/index.md"]);
+		assert.deepEqual(wikiSearch(root, "needle").map((r) => r.path), ["sub/page.md"]);
+	} finally {
+		chmodSync(path.join(root, "trancada"), 0o755);
+	}
 });
