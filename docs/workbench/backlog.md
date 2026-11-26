@@ -54,3 +54,11 @@ Lista local e temporária de melhorias candidatas para a Workbench, antes de ser
 - **Em aberto:** como o `wb` reconhece uma base OKF (o `index.md` de um bundle); como manter a base só leitura no sandbox; como avisar quando uma etapa lê conceitos vencidos ou não verificados.
 - **Referências:** [Open Knowledge Format, SPEC v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md).
 - **Próximo passo quando selecionada:** refinar a ideia nos workflows de brainstorm, grill-me e design.
+
+## Arquivos das etapas separados por feature
+
+- **Estado:** ideia não refinada.
+- **Intenção:** guardar as saídas das etapas (`idea.md`, `brief.md`, `decisions.md`, `technical-design.md`, `plan.md`, `review.md`) numa pasta por feature, por exemplo `docs/workbench/<slug>/`, ou ter um `wb step archive` que encerra a feature e libera `docs/workbench/` para a próxima.
+- **Contexto:** hoje os caminhos são fixos (SPEC §5). Se os arquivos de uma feature entram na `main`, a próxima vê as etapas como prontas no `wb status`, o `build` retoma o `plan.md` antigo ("continue do primeiro lote não concluído") e o `brainstorm` seguinte sobrescreve o registro. Na feature da wiki (PR #13), a saída foi tirar os arquivos do PR e resumir a decisão num ADR. Por outro lado, o [ADR 0003](../adr/0003-aprovacao-por-pr-com-bot.md) aprova o design por PR, o que pede o `technical-design.md` no repo.
+- **Em aberto:** de onde vem o slug (da ideia, da branch ou passado pela pessoa); o que fica no repo depois do merge (tudo, só o design ou nada, com o ADR como registro); como `.workbench/state.json` acompanha várias features; se duas features podem andar ao mesmo tempo no mesmo projeto (uma por worktree já resolve boa parte).
+- **Próximo passo quando selecionada:** refinar a ideia nos workflows de brainstorm, grill-me e design.
