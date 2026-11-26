@@ -2,17 +2,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { recoverInterrupted } from "./guard.ts";
-import { SANDBOX_NAMES, type SandboxName } from "./sandbox-profiles.ts";
+import { SANDBOX_NAMES, type SandboxOverrides } from "./sandbox-profiles.ts";
 
 /** `.workbench.json` opcional na raiz do projeto: só exceções aos sandboxes. */
-export interface ProjectConfig {
-	/** Sandbox padrão do `wb run` neste projeto. */
-	sandbox?: SandboxName;
-	/** Globs negados além dos sempre negados. */
-	deny?: string[];
-	/** Globs graváveis a mais, por sandbox. */
-	write?: Partial<Record<SandboxName, string[]>>;
-}
+export type ProjectConfig = SandboxOverrides;
 
 export function loadProjectConfig(root: string): ProjectConfig {
 	recoverInterrupted(root);
