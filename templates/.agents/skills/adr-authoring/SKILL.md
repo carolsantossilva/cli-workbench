@@ -16,43 +16,7 @@ Use an architecture decision record (ADR) to preserve why a consequential techni
 
 ## Write the record
 
-- Keep one consequential decision per ADR. Reuse the local template. If none exists, use the minimal [MADR 4.0](https://adr.github.io/madr/) template plus three of MADR's own optional elements:
-
-  ```markdown
-  ---
-  status: proposed
-  date: YYYY-MM-DD
-  decision-makers: <who decided>
-  ---
-
-  # <short title stating the decision>
-
-  ## Context and Problem Statement
-
-  <2-3 sentences of context, ending with the problem as a question; make the scope explicit.>
-
-  ## Considered Options
-
-  * <option 1>
-  * <option 2>
-
-  ## Decision Outcome
-
-  Chosen option: "<option 1>", because <justification>.
-
-  ### Consequences
-
-  * Good, because <positive consequence>
-  * Bad, because <negative consequence>
-
-  ### Confirmation
-
-  <How compliance is checked: tests, automated checks, or review.>
-
-  ## More Information
-
-  <Implementation evidence (PRs, commits), related ADRs, when to revisit.>
-  ```
+- Keep one consequential decision per ADR. Reuse the local template. If none exists, copy [assets/adr-template.md](assets/adr-template.md): the minimal [MADR 4.0](https://adr.github.io/madr/) template plus three of MADR's own optional elements (frontmatter with `status`, `date` and `decision-makers`; `### Confirmation`; `## More Information`).
 
   List the chosen option among the Considered Options, and include only options that were really considered. Keep the section headings as in the template so tools recognize them; the body may follow the project's language.
 - Follow local file naming. If the project has no ADR convention and the user asked for a new log, use `docs/adr/NNNN-short-action-name.md` with the next unused number and maintain a small index.
