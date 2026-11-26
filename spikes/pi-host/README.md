@@ -2,7 +2,7 @@
 
 Descartável, não é código de produção. Pergunta respondida: *o SDK do Pi permite que a Workbench aplique o contrato de um workflow no momento da ação, mantendo o núcleo Go como fonte de verdade?* Resposta: **sim, para o workflow `brainstorm`, com um modelo roteirizado.**
 
-Contexto: [`docs/workbench/pi-host/brief.md`](../../docs/workbench/pi-host/brief.md) e [ADR 0001](../../docs/adr/0001-workbench-como-host-de-agente.md).
+Contexto: [ADR 0001](../../docs/adr/0001-workbench-como-host-de-agente.md) e [`docs/workbench/pi-host/decisions.md`](../../docs/workbench/pi-host/decisions.md). O brief original está no histórico do git.
 
 ## Arquivos
 

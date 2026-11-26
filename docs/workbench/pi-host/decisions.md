@@ -2,7 +2,7 @@
 
 > Registro histórico. O resultado destas decisões está no [ADR 0001](../../adr/0001-workbench-como-host-de-agente.md), aceito em 2026-11-24, que também fecha os itens em aberto daqui.
 
-Status: grill-me, rodada 1 (2026-10-18). Entradas: `brief.md` e o spike em [`spikes/pi-host`](../../../spikes/pi-host/) (README com os resultados). Estas decisões de direção ainda não são design aprovado. A D1 contraria o `design.md` e precisa de um ADR antes de qualquer implementação.
+Status: grill-me, rodada 1 (2026-10-18). Entradas: `brief.md` (substituido pela ADR 0001) e o spike em [`spikes/pi-host`](../../../spikes/pi-host/) (README com os resultados). Estas decisões de direção ainda não são design aprovado. A D1 contraria o `design.md` e precisa de um ADR antes de qualquer implementação.
 
 ## D1 — Papel do host: caminho principal
 
