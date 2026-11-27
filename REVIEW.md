@@ -7,7 +7,7 @@ Regras para quem revisa mudanças neste repositório, pessoa ou agente (inclusiv
 - **Toda ferramenta da sessão passa pela tabela `TOOLS` em `host/src/tools.ts`.** É ela que decide se a ferramenta entra na sessão, como o gate decide cada chamada e qual linha aparece na descrição do escopo (system prompt e `wb scope`). Aponte qualquer ferramenta registrada, liberada no gate ou incluída na lista da sessão por outro caminho, como um parâmetro ou opção solta ao lado do escopo.
 - **Todo acesso novo do agente faz parte do `EffectiveScope`.** Isso vale para leitura fora da raiz do projeto, rede, um novo tipo de escrita ou uma nova fonte de dados. O acesso precisa ser preenchido em `resolveScope` e em `stepScope`, e aparecer no `describeScope`. Se o `wb scope` não mostra um acesso, ele não está revisado.
 - **O que o system prompt diz precisa bater com o que o gate faz.** Se a descrição afirma que algo nunca é liberado, nenhuma ferramenta pode liberar isso, nem como exceção implícita.
-- **Regras fixas não viram pergunta.** Arquivos sensíveis, caminhos fora da raiz, `.git` e a configuração da Workbench são negados por regra (SPEC §2), mesmo com aprovação interativa.
+- **Regras fixas não viram pergunta.** Arquivos sensíveis, caminhos fora da raiz, `.git` e a configuração da Workbench são negados por regra (SPEC §2) nas ferramentas de arquivo e no bash, mesmo com aprovação interativa. A única exceção prevista é a leitura da wiki pela ferramenta `wiki`, com opt-in no `EffectiveScope` (ADR 0004). Qualquer outra é defeito.
 
 ## Dados que vêm do modelo ou de fora
 
