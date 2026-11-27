@@ -1,5 +1,5 @@
 // Host da Workbench sobre o SDK do Pi: monta uma sessão com o escopo do sandbox, roda a
-// tarefa e devolve o que aconteceu. As regras ficam em gate.ts (o que pode), extension.ts
+// tarefa e devolve o que aconteceu. As regras ficam em tools.ts (quais ferramentas existem), gate.ts (o que pode), extension.ts
 // (como o Pi as aplica), redact.ts (o que sai para o modelo) e usage.ts (auditoria e tokens).
 import { execFileSync } from "node:child_process";
 import { mkdirSync, realpathSync } from "node:fs";
@@ -24,6 +24,7 @@ import { assertProjectRoot, redactSecrets } from "./policy.ts";
 import { type EffectiveScope, type SandboxName, resolveScope } from "./sandbox-profiles.ts";
 import { loadProjectConfig, type ProjectConfig } from "./project-config.ts";
 import { looksLikeRefusal, rewritePrompt } from "./refusal.ts";
+import { enabledToolNames, TOOLS } from "./tools.ts";
 import { sandboxAvailable, wrapCommand } from "./sandbox.ts";
 import { type Audit, emptyUsage, newRunId, openAudit, recordUsage, type TokenUsage } from "./usage.ts";
 import { auditDirFor } from "./workdir.ts";
@@ -99,20 +100,14 @@ function gitChanges(root: string): Set<string> | undefined {
 	}
 }
 
-export function describeScope(scope: EffectiveScope, commands: DetectedCommand[], interactive = false): string {
+export function describeScope(scope: EffectiveScope, commands: DetectedCommand[], interactive = false, askUser?: RunOptions["askUser"]): string {
 	const p = scope.profile;
+	const ctx = { scope, interactive, askUser };
 	return [
 		`# Workbench: sandbox "${p.name}"`,
 		p.description,
-		`Leitura: ${scope.read.join(", ")}`,
-		`Escrita: ${scope.write.join(", ") || "nenhuma"}`,
+		...TOOLS.map((t) => t.describe(ctx, commands)),
 		`Sempre negado: ${scope.deny.join(", ")}`,
-		scope.wiki
-			? "Wiki (kb-ai): consulta só leitura pela ferramenta wiki, a única leitura fora da raiz do projeto."
-			: 'Wiki (kb-ai): desabilitada (habilite com "kbAi": { "wiki": true } no .workbench.json).',
-		p.bash !== "none"
-			? `Comandos: bash disponível num sandbox SEM rede (não dá para instalar dependências nem acessar a internet)${p.bash === "sandbox-ro" ? ", com o projeto SÓ LEITURA" : ""}. Comandos detectados no projeto: ${commands.map((c) => c.command).join(", ") || "nenhum"}.`
-			: "Comandos: nenhum. O bash não está disponível neste sandbox.",
 		interactive
 			? "Se a tarefa exigir ler ou escrever um arquivo fora desse escopo, faça a chamada mesmo assim: o host pergunta ao usuário, que pode liberar ou negar. Arquivos sensíveis, caminhos fora da raiz, .git e a configuração da Workbench nunca são liberados. Se uma chamada for negada, não tente contornar: siga sem ela e diga no resumo final o que faltou."
 			: "Chamadas fora desse escopo são bloqueadas pelo host. Não tente contornar o bloqueio: se precisar de algo bloqueado, diga no resumo final o que faltou e por quê.",
@@ -141,8 +136,8 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	const { modelRuntime, model } = await resolveModel(opts);
 	const agentDir = opts.agentDir ?? path.join(os.homedir(), ".pi", "agent");
 	const settingsManager = SettingsManager.inMemory({ compaction: { enabled: true } });
-	const extension = workbenchExtension({ root, scope, gate, audit, askUser: opts.askUser });
-	const resourceLoader = await loadResources(root, agentDir, settingsManager, extension, describeScope(scope, commands, Boolean(opts.ask)));
+	const extension = workbenchExtension({ root, scope, gate, audit, askUser: opts.askUser, interactive: Boolean(opts.ask) });
+	const resourceLoader = await loadResources(root, agentDir, settingsManager, extension, describeScope(scope, commands, Boolean(opts.ask), opts.askUser));
 
 	const before = gitChanges(root);
 	const guard = beginGuard(root, runId);
@@ -223,21 +218,15 @@ async function loadResources(root: string, agentDir: string, settingsManager: Se
 
 /** A allowlist de ferramentas da sessão; o "bash" é a definição que roda no sandbox. */
 function sessionTools(root: string, scope: EffectiveScope, opts: RunOptions) {
-	const tools = ["read", "grep", "find", "ls"];
-	// Com aprovação interativa, até o sandbox read-only recebe write/edit: cada escrita vira pergunta.
-	if (scope.write.length > 0 || opts.ask) tools.push("write", "edit");
-	if (scope.profile.bash !== "none") tools.push("bash");
-	if (opts.askUser) tools.push("ask_user");
-	if (scope.wiki) tools.push("wiki");
-	const customTools =
-		scope.profile.bash !== "none"
-			? [
-					createBashToolDefinition(root, {
-						exposeSessionEnvironment: false,
-						spawnHook: (c) => ({ ...c, command: wrapCommand(c.command, root, c.cwd, scope.deny, scope.profile.bash === "sandbox") }),
-					}),
-				]
-			: [];
+	const tools = enabledToolNames({ scope, interactive: Boolean(opts.ask), askUser: opts.askUser });
+	const customTools = tools.includes("bash")
+		? [
+				createBashToolDefinition(root, {
+					exposeSessionEnvironment: false,
+					spawnHook: (c) => ({ ...c, command: wrapCommand(c.command, root, c.cwd, scope.deny, scope.profile.bash === "sandbox") }),
+				}),
+			]
+		: [];
 	return { tools, customTools: customTools as never };
 }
 
