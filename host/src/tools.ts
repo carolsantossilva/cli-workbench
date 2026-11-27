@@ -12,7 +12,7 @@ import { formatWikiRecord, resolveWikiDir, showWikiPage, wikiIndexes, wikiSearch
 /** O que decide quais ferramentas existem numa execução. */
 export interface ToolContext {
 	scope: EffectiveScope;
-	/** Há usuário para aprovar leituras e escritas fora do escopo. */
+	/** Há usuário para aprovar leituras e escritas fora do escopo. Indefinido fora de uma execução (`wb scope`). */
 	interactive?: boolean;
 	/** Habilita a ferramenta ask_user. */
 	askUser?: (question: string) => Promise<string>;
@@ -65,8 +65,12 @@ export const TOOLS: readonly ToolSpec[] = [
 	{
 		names: ["ask_user"],
 		enabled: ({ askUser }) => Boolean(askUser),
-		describe: ({ askUser }) =>
-			askUser ? "Perguntas ao usuário: pela ferramenta ask_user, uma por chamada." : "Perguntas ao usuário: nenhuma (não há usuário para responder).",
+		describe: ({ askUser, interactive }) =>
+			askUser
+				? "Perguntas ao usuário: pela ferramenta ask_user, uma por chamada."
+				: interactive === undefined
+					? "Perguntas ao usuário: pela ferramenta ask_user quando o wb roda num terminal interativo."
+					: "Perguntas ao usuário: nenhuma (não há usuário para responder).",
 		decide: (_tool, _input, target, { askUser }, gate) =>
 			askUser ? gate.decide("ask_user", target, true) : gate.decide("ask_user", target, false, "sem usuário para responder", "rule"),
 		register: (pi, { askUser }, deps) => askUser && registerAskUser(pi, askUser, deps),

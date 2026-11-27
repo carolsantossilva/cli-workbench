@@ -100,7 +100,7 @@ function gitChanges(root: string): Set<string> | undefined {
 	}
 }
 
-export function describeScope(scope: EffectiveScope, commands: DetectedCommand[], interactive = false, askUser?: RunOptions["askUser"]): string {
+export function describeScope(scope: EffectiveScope, commands: DetectedCommand[], interactive?: boolean, askUser?: RunOptions["askUser"]): string {
 	const p = scope.profile;
 	const ctx = { scope, interactive, askUser };
 	return [

@@ -69,6 +69,12 @@ test("a extensão registra só as ferramentas próprias habilitadas", () => {
 	}
 });
 
+test("wb scope, sem execução, diz que ask_user depende de terminal interativo", () => {
+	const scope = resolveScope("read-only", {});
+	assert.match(describeScope(scope, []), /ask_user quando o wb roda num terminal interativo/);
+	assert.match(describeScope(scope, [], false), /Perguntas ao usuário: nenhuma/);
+});
+
 test("ferramenta fora da tabela é negada", async () => {
 	const { gate } = recordingGate();
 	const result = await decideToolCall("web_fetch", {}, { scope: resolveScope("workspace-write", {}), root: "/projeto", gate, audit: (() => {}) as never });
