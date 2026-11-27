@@ -35,7 +35,7 @@ Quando o agente tenta ler ou escrever um arquivo fora do sandbox, a Workbench pe
 
 - `s` libera só aquela chamada. `t` libera aquele arquivo até o fim da execução. `n`, ou Enter, nega.
 - Com `--no-input` (ou `WB_NO_INPUT=1`), ou sem terminal interativo, tudo fora do sandbox é negado sem perguntar.
-- Regras fixas **nunca** viram pergunta: arquivos sensíveis, caminhos fora da raiz, `.git/` e a configuração da Workbench.
+- Regras fixas **nunca** viram pergunta: arquivos sensíveis, caminhos fora da raiz, `.git/` e a configuração da Workbench. A exceção é a ferramenta `wiki`, que lê a wiki do kb-ai fora da raiz quando o projeto habilita `kbAi.wiki` (veja abaixo).
 - Com a aprovação ligada, até o sandbox `read-only` recebe `write`/`edit`, e cada escrita vira pergunta. O bash continua só no `workspace-write`.
 - Cada resposta fica registrada na auditoria (evento `approval`).
 

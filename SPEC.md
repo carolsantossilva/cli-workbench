@@ -25,7 +25,7 @@ E também tarefas avulsas (`wb run`) sob um sandbox.
 
 Na V1 há dois tipos de autonomia:
 - **Ações dentro do sandbox** acontecem sem pedir licença.
-- **Ações fora dele** viram pergunta ao usuário (aprovação interativa) ou são negadas. Regras fixas, como arquivos sensíveis, `.git` e a configuração da Workbench, nunca são liberadas.
+- **Ações fora dele** viram pergunta ao usuário (aprovação interativa) ou são negadas. Regras fixas, como arquivos sensíveis, caminhos fora da raiz, `.git` e a configuração da Workbench, nunca são liberadas. A única leitura fora da raiz é a da wiki do kb-ai, pela ferramenta `wiki`, com opt-in por projeto ([ADR 0004](docs/adr/0004-consulta-da-wiki-kb-ai.md)).
 
 ### Projeto de validação
 
