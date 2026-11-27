@@ -634,3 +634,46 @@ test("a home, ou um diretório acima dela, não pode ser o projeto", () => {
 		process.env.HOME = old;
 	}
 });
+
+test("ferramenta wiki: só com opt-in no .workbench.json, lê wiki/ e nunca raw/", async (t) => {
+	const kb = path.join(tmp, "kb-ai");
+	mkdirSync(path.join(kb, "wiki/conceitos"), { recursive: true });
+	mkdirSync(path.join(kb, "raw"), { recursive: true });
+	writeFileSync(path.join(kb, "wiki/index.md"), "# Wiki\n");
+	writeFileSync(path.join(kb, "wiki/conceitos/rag.md"), "---\ntitle: RAG\ndescription: Busca e geração\nstatus: draft\n---\nAGULHA-WIKI\n");
+	writeFileSync(path.join(kb, "raw/bruto.md"), "AGULHA-RAW\n");
+	const previous = process.env.WB_WIKI_DIR;
+	process.env.WB_WIKI_DIR = path.join(kb, "wiki");
+	t.after(() => (previous === undefined ? delete process.env.WB_WIKI_DIR : (process.env.WB_WIKI_DIR = previous)));
+
+	const calls = () => [
+		fauxAssistantMessage(
+			[
+				fauxToolCall("wiki", { action: "index" }),
+				fauxToolCall("wiki", { action: "search", query: "agulha" }),
+				fauxToolCall("wiki", { action: "show", path: "conceitos/rag.md" }),
+				fauxToolCall("wiki", { action: "show", path: "../raw/bruto.md" }),
+			],
+			{ stopReason: "toolUse" },
+		),
+	];
+
+	const comOptIn = makeProject("wiki-on");
+	writeFileSync(path.join(comOptIn, ".workbench.json"), JSON.stringify({ kbAi: { wiki: true } }));
+	let sent = "";
+	const on = await fauxRuntime([...calls(), (context) => ((sent = toolOutputs(context)), fauxAssistantMessage([fauxText("ok")]))]);
+	const r = await runTask({ projectDir: comOptIn, task: "consulte a wiki", sandbox: "read-only", modelRuntime: on.modelRuntime, modelOverride: on.model, auditDir: path.join(tmp, "audit") });
+	assert.ok(r.decisions.some((d) => d.tool === "wiki" && d.allowed), "com opt-in a ferramenta wiki roda");
+	assert.ok(sent.includes("path: index.md"));
+	assert.ok(sent.includes("path: conceitos/rag.md") && sent.includes("quality: draft"));
+	assert.ok(sent.includes("AGULHA-WIKI"));
+	assert.ok(!sent.includes("AGULHA-RAW"), "raw/ nunca chega ao modelo");
+	assert.ok(sent.includes("página indisponível"));
+
+	const semOptIn = makeProject("wiki-off");
+	let sentOff = "";
+	const off = await fauxRuntime([...calls(), (context) => ((sentOff = toolOutputs(context)), fauxAssistantMessage([fauxText("ok")]))]);
+	const r2 = await runTask({ projectDir: semOptIn, task: "consulte a wiki", sandbox: "read-only", modelRuntime: off.modelRuntime, modelOverride: off.model, auditDir: path.join(tmp, "audit") });
+	assert.ok(!r2.decisions.some((d) => d.tool === "wiki" && d.allowed), "sem opt-in a ferramenta wiki não existe");
+	assert.ok(!sentOff.includes("AGULHA-WIKI"));
+});

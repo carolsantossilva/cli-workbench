@@ -2,66 +2,32 @@
 // ferramenta, limpa os resultados e audita tudo o que vai para o provedor.
 import { createHash } from "node:crypto";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
 import type { Gate } from "./gate.ts";
 import { redactSecrets } from "./policy.ts";
-import type { EffectiveScope } from "./sandbox-profiles.ts";
 import { dropDeniedLines, redactDeep } from "./redact.ts";
 import type { Audit } from "./usage.ts";
+import { registerTools, type ToolContext, toolSpec } from "./tools.ts";
 
-export interface ExtensionOptions {
+export interface ExtensionOptions extends ToolContext {
 	root: string;
-	scope: EffectiveScope;
 	gate: Gate;
 	audit: Audit;
-	/** Habilita a ferramenta ask_user. */
-	askUser?: (question: string) => Promise<string>;
 }
 
 export function workbenchExtension(o: ExtensionOptions): (pi: ExtensionAPI) => void {
 	return (pi) => {
-		if (o.askUser) registerAskUser(pi, o.askUser, o);
+		registerTools(pi, o, o);
 		pi.on("tool_call", async (event) => decideToolCall(event.toolName, event.input as Record<string, unknown>, o));
 		pi.on("tool_result", async (event) => cleanToolResult(event.toolName, event.content, o));
 		auditProviderTraffic(pi, o.audit);
 	};
 }
 
-function registerAskUser(pi: ExtensionAPI, askUser: (question: string) => Promise<string>, { gate, audit }: ExtensionOptions) {
-	pi.registerTool({
-		name: "ask_user",
-		label: "Perguntar ao usuário",
-		description: "Faz uma pergunta ao usuário e espera a resposta. Use para decisões que só o usuário pode tomar; uma pergunta por chamada.",
-		parameters: Type.Object({ question: Type.String({ description: "A pergunta, curta e concreta, com uma recomendação se houver" }) }),
-		async execute(_id, params) {
-			const resposta = (await gate.serial(() => askUser(params.question))).trim();
-			audit("question", { bytes: Buffer.byteLength(resposta) });
-			return { content: [{ type: "text", text: resposta || "(sem resposta: decida com uma premissa explícita)" }], details: {} };
-		},
-	});
-}
-
 /** Toda chamada passa por aqui antes de acontecer; ferramenta desconhecida é negada. */
-function decideToolCall(tool: string, input: Record<string, unknown>, { scope, gate, askUser }: ExtensionOptions) {
-	const target = String(input.path ?? input.command ?? input.question ?? ".");
-	switch (tool) {
-		case "read":
-		case "grep":
-		case "find":
-		case "ls":
-			return gate.checkFile(tool, String(input.path ?? "."), "read");
-		case "write":
-		case "edit":
-			return gate.checkFile(tool, String(input.path ?? ""), "write");
-		case "ask_user":
-			return askUser ? gate.decide("ask_user", target, true) : gate.decide("ask_user", target, false, "sem usuário para responder", "rule");
-		case "bash":
-			return scope.profile.bash !== "none"
-				? gate.decide("bash", target, true, "sandbox")
-				: gate.decide("bash", target, false, `o sandbox "${scope.profile.name}" não roda comandos`, "rule");
-		default:
-			return gate.decide(tool, target, false, "ferramenta fora do contrato da Workbench", "rule");
-	}
+export function decideToolCall(tool: string, input: Record<string, unknown>, o: ExtensionOptions) {
+	const target = String(input.path ?? input.command ?? input.question ?? input.query ?? input.action ?? ".");
+	const spec = toolSpec(tool);
+	return spec ? spec.decide(tool, input, target, o, o.gate) : o.gate.decide(tool, target, false, "ferramenta fora do contrato da Workbench", "rule");
 }
 
 /**

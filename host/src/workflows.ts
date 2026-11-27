@@ -131,6 +131,7 @@ export function stepScope(def: StepDef, cfg: ProjectConfig): EffectiveScope {
 		write: def.write,
 		deny: [...ALWAYS_DENY, ...(cfg.deny ?? [])],
 		writeDeny: WRITE_DENY,
+		wiki: cfg.kbAi?.wiki === true,
 	};
 }
 

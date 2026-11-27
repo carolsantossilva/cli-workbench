@@ -48,10 +48,9 @@ Lista local e temporária de melhorias candidatas para a Workbench, antes de ser
 
 ## Base de conhecimento OKF no projeto
 
-- **Estado:** ideia não refinada.
-- **Intenção:** permitir que um projeto inclua uma base de conhecimento no formato Open Knowledge Format, só leitura, que o `design` e o `review` consultam. Os agentes poderiam filtrar conceitos por `type`, `sources`, `verified` e `stale_after`.
-- **Contexto:** o OKF v0.2 padroniza proveniência, confiança e validade em frontmatter, o que dá um contrato estável para consumir conhecimento sem adaptador. Com o projeto acima dos repos ([ADR 0002](../adr/0002-projeto-acima-dos-repos.md)), a base pode ser um repo detectado dentro do projeto.
-- **Em aberto:** como o `wb` reconhece uma base OKF (o `index.md` de um bundle); como manter a base só leitura no sandbox; como avisar quando uma etapa lê conceitos vencidos ou não verificados.
+- **Estado:** ideia não refinada. A consulta de uma base fora do projeto já existe ([ADR 0004](../adr/0004-consulta-da-wiki-kb-ai.md): `wb wiki` e a ferramenta `wiki`, só leitura e com opt-in); este item é o que falta além dela.
+- **Intenção:** reconhecer uma base OKF que é um repo dentro do projeto ([ADR 0002](../adr/0002-projeto-acima-dos-repos.md)), sem configuração, e deixar os agentes filtrarem conceitos por `type`, `sources` e `verified`, além dos avisos de `stale_after` e `status` que já existem.
+- **Em aberto:** como o `wb` reconhece o bundle (o `index.md` com `okf_version`); como convivem a base do projeto e a configurada em `kbAi`; como avisar quando uma etapa usa conceitos não verificados.
 - **Referências:** [Open Knowledge Format, SPEC v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md).
 - **Próximo passo quando selecionada:** refinar a ideia nos workflows de brainstorm, grill-me e design.
 
