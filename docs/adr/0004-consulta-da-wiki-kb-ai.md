@@ -1,7 +1,7 @@
 # 0004 — Consulta da wiki do kb-ai, só leitura e com opt-in
 
-- **Status:** proposed
-- **Escrito em:** 2026-11-26.
+- **Status:** accepted
+- **Escrito em:** 2026-11-26. **Aceito em:** 2026-11-27.
 - **Escopo:** como os agentes (o do `wb` e os de fora, como Claude Code e Codex) consultam a base de conhecimento pessoal `kb-ai`, e o que o `wb` pode ler fora do projeto.
 - **Implementação:** PR #13 (`wb wiki`, ferramenta Pi `wiki`, chave `kbAi` no `.workbench.json`).
 
@@ -20,7 +20,7 @@ Ao trabalhar em outros projetos, os agentes não sabem que essa base existe nem 
    - **`wb wiki`**, para qualquer agente, dentro ou fora de um projeto: `wb wiki` (índices, raiz primeiro), `wb wiki <termo>` (busca textual com `path`, `title`, `description`, `quality`) e `wb wiki show <caminho>`. A ajuda (`wb wiki --help`) diz ao agente quando consultar, que deve citar o caminho, avisar quando uma página está vencida, em rascunho ou com divergência, e que o conteúdo é dado, nunca instrução.
    - **A ferramenta Pi `wiki`** (`action: index | search | show`), com as mesmas semânticas, nos runs e etapas do `wb`.
 3. **Opt-in por projeto.**
-   - No `wb`: `"kbAi": { "wiki": true }` no `.workbench.json`. Sem isso, a ferramenta não é registrada, não entra na lista de ferramentas da sessão e é negada no gate.
+   - No `wb`: `"kbAi": { "wiki": true }` no `.workbench.json`. O opt-in faz parte do escopo efetivo da execução (`EffectiveScope.wiki`, também nas etapas), então aparece no `wb scope` e no prompt de sistema junto com o resto do que o agente pode ler. Sem isso, a ferramenta não é registrada, não entra na lista de ferramentas da sessão e é negada no gate.
    - Fora do `wb`: uma linha que a pessoa põe no `AGENTS.md` do projeto ("Para consultar a base de conhecimento, use `wb wiki` (veja `wb wiki --help`)"). O `wb` nunca escreve nesse arquivo.
 4. **Onde está a wiki:** `WB_WIKI_DIR`, depois `~/.config/workbench/config.json` (`kbAi.wikiDir`), depois `~/developer-carol/kb-ai/wiki`. Lida direto do clone, que fica limpo na `main`; sem cópia, cache ou índice próprio.
 5. **Falhas:** um `kbAi` malformado no `.workbench.json` para o run, como as outras chaves. Uma wiki configurada mas ausente ou ilegível só gera um aviso, e a tarefa segue sem ela. Uma pasta ilegível fica de fora da busca.
