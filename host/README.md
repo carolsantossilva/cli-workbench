@@ -102,7 +102,7 @@ Em todos os sandboxes vale o seguinte:
 - `deny`: globs negados além dos sempre negados.
 - `write`: globs graváveis a mais, por sandbox.
 
-As chaves antigas em português (`perfil`, `negar`, `perfis`) dão erro com a indicação das novas. Para habilitar a ferramenta Pi de consulta da wiki neste projeto, use `"kbAi": { "wiki": true }`; sem opt-in a ferramenta não é registrada.
+As chaves antigas em português (`perfil`, `negar`, `perfis`) dão erro com a indicação das novas. Para habilitar a ferramenta Pi de consulta da wiki neste projeto, use `"kbAi": { "wiki": true }`; sem opt-in a ferramenta não é registrada. O `wb scope` mostra se ela está habilitada.
 
 Agentes externos ao `wb` podem receber orientação por projeto adicionando manualmente ao `AGENTS.md`:
 

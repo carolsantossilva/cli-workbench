@@ -5,10 +5,7 @@ import { recoverInterrupted } from "./guard.ts";
 import { SANDBOX_NAMES, type SandboxOverrides } from "./sandbox-profiles.ts";
 
 /** `.workbench.json` opcional na raiz do projeto: só exceções aos sandboxes. */
-export interface ProjectConfig extends SandboxOverrides {
-	/** Opt-in explícito para a ferramenta nativa de consulta da wiki. */
-	kbAi?: { wiki?: boolean };
-}
+export type ProjectConfig = SandboxOverrides;
 
 export function loadProjectConfig(root: string): ProjectConfig {
 	recoverInterrupted(root);

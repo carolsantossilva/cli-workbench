@@ -107,6 +107,9 @@ export function describeScope(scope: EffectiveScope, commands: DetectedCommand[]
 		`Leitura: ${scope.read.join(", ")}`,
 		`Escrita: ${scope.write.join(", ") || "nenhuma"}`,
 		`Sempre negado: ${scope.deny.join(", ")}`,
+		scope.wiki
+			? "Wiki (kb-ai): consulta só leitura pela ferramenta wiki, a única leitura fora da raiz do projeto."
+			: 'Wiki (kb-ai): desabilitada (habilite com "kbAi": { "wiki": true } no .workbench.json).',
 		p.bash !== "none"
 			? `Comandos: bash disponível num sandbox SEM rede (não dá para instalar dependências nem acessar a internet)${p.bash === "sandbox-ro" ? ", com o projeto SÓ LEITURA" : ""}. Comandos detectados no projeto: ${commands.map((c) => c.command).join(", ") || "nenhum"}.`
 			: "Comandos: nenhum. O bash não está disponível neste sandbox.",
@@ -138,7 +141,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 	const { modelRuntime, model } = await resolveModel(opts);
 	const agentDir = opts.agentDir ?? path.join(os.homedir(), ".pi", "agent");
 	const settingsManager = SettingsManager.inMemory({ compaction: { enabled: true } });
-	const extension = workbenchExtension({ root, scope, gate, audit, askUser: opts.askUser, wikiEnabled: config.kbAi?.wiki === true });
+	const extension = workbenchExtension({ root, scope, gate, audit, askUser: opts.askUser });
 	const resourceLoader = await loadResources(root, agentDir, settingsManager, extension, describeScope(scope, commands, Boolean(opts.ask)));
 
 	const before = gitChanges(root);
@@ -155,7 +158,7 @@ export async function runTask(opts: RunOptions): Promise<RunResult> {
 		modelRuntime,
 		resourceLoader,
 		settingsManager,
-		...sessionTools(root, scope, opts, config.kbAi?.wiki === true),
+		...sessionTools(root, scope, opts),
 		sessionManager: SessionManager.inMemory(root),
 	});
 	await session.bindExtensions?.({});
@@ -219,13 +222,13 @@ async function loadResources(root: string, agentDir: string, settingsManager: Se
 }
 
 /** A allowlist de ferramentas da sessão; o "bash" é a definição que roda no sandbox. */
-function sessionTools(root: string, scope: EffectiveScope, opts: RunOptions, wiki: boolean) {
+function sessionTools(root: string, scope: EffectiveScope, opts: RunOptions) {
 	const tools = ["read", "grep", "find", "ls"];
 	// Com aprovação interativa, até o sandbox read-only recebe write/edit: cada escrita vira pergunta.
 	if (scope.write.length > 0 || opts.ask) tools.push("write", "edit");
 	if (scope.profile.bash !== "none") tools.push("bash");
 	if (opts.askUser) tools.push("ask_user");
-	if (wiki) tools.push("wiki");
+	if (scope.wiki) tools.push("wiki");
 	const customTools =
 		scope.profile.bash !== "none"
 			? [

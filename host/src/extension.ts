@@ -17,14 +17,12 @@ export interface ExtensionOptions {
 	audit: Audit;
 	/** Habilita a ferramenta ask_user. */
 	askUser?: (question: string) => Promise<string>;
-	/** Opt-in explícito para consultar wiki. */
-	wikiEnabled?: boolean;
 }
 
 export function workbenchExtension(o: ExtensionOptions): (pi: ExtensionAPI) => void {
 	return (pi) => {
 		if (o.askUser) registerAskUser(pi, o.askUser, o);
-		if (o.wikiEnabled) registerWiki(pi);
+		if (o.scope.wiki) registerWiki(pi);
 		pi.on("tool_call", async (event) => decideToolCall(event.toolName, event.input as Record<string, unknown>, o));
 		pi.on("tool_result", async (event) => cleanToolResult(event.toolName, event.content, o));
 		auditProviderTraffic(pi, o.audit);
@@ -76,7 +74,7 @@ function registerAskUser(pi: ExtensionAPI, askUser: (question: string) => Promis
 }
 
 /** Toda chamada passa por aqui antes de acontecer; ferramenta desconhecida é negada. */
-export function decideToolCall(tool: string, input: Record<string, unknown>, { scope, gate, askUser, wikiEnabled }: ExtensionOptions) {
+export function decideToolCall(tool: string, input: Record<string, unknown>, { scope, gate, askUser }: ExtensionOptions) {
 	const target = String(input.path ?? input.command ?? input.question ?? input.query ?? input.action ?? ".");
 	switch (tool) {
 		case "read":
@@ -90,7 +88,7 @@ export function decideToolCall(tool: string, input: Record<string, unknown>, { s
 		case "ask_user":
 			return askUser ? gate.decide("ask_user", target, true) : gate.decide("ask_user", target, false, "sem usuário para responder", "rule");
 		case "wiki":
-			return wikiEnabled ? gate.decide("wiki", target, true, "wiki opt-in") : gate.decide("wiki", target, false, "wiki não habilitada neste projeto", "rule");
+			return scope.wiki ? gate.decide("wiki", target, true, "wiki opt-in") : gate.decide("wiki", target, false, "wiki não habilitada neste projeto", "rule");
 		case "bash":
 			return scope.profile.bash !== "none"
 				? gate.decide("bash", target, true, "sandbox")

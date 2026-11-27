@@ -67,6 +67,8 @@ export interface SandboxOverrides {
 	deny?: string[];
 	/** Globs graváveis a mais, por sandbox. */
 	write?: Partial<Record<SandboxName, string[]>>;
+	/** Opt-in explícito para a ferramenta de consulta da wiki do kb-ai. */
+	kbAi?: { wiki?: boolean };
 }
 
 export interface EffectiveScope {
@@ -75,6 +77,8 @@ export interface EffectiveScope {
 	write: string[];
 	deny: string[];
 	writeDeny: string[];
+	/** Ferramenta wiki: consulta só leitura da wiki do kb-ai, fora da raiz do projeto. */
+	wiki: boolean;
 }
 
 export function resolveScope(name: SandboxName | undefined, cfg: SandboxOverrides): EffectiveScope {
@@ -87,5 +91,6 @@ export function resolveScope(name: SandboxName | undefined, cfg: SandboxOverride
 		write: [...profile.write, ...(cfg.write?.[chosen] ?? [])],
 		deny: [...ALWAYS_DENY, ...(cfg.deny ?? [])],
 		writeDeny: WRITE_DENY,
+		wiki: cfg.kbAi?.wiki === true,
 	};
 }

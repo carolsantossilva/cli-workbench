@@ -6,6 +6,9 @@ import { after, test } from "node:test";
 import { resolveWikiDir, showWikiPage, wikiIndexes, wikiSearch } from "../src/wiki.ts";
 import { loadProjectConfig } from "../src/project-config.ts";
 import { decideToolCall, workbenchExtension } from "../src/extension.ts";
+import { describeScope } from "../src/host.ts";
+import { resolveScope } from "../src/sandbox-profiles.ts";
+import { STEPS, stepScope } from "../src/workflows.ts";
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "wb-wiki-test-"));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -59,19 +62,29 @@ test("extensão registra wiki somente com opt-in", () => {
 	const register = (enabled: boolean) => {
 		const names: string[] = [];
 		const pi = { registerTool: (tool: { name: string }) => names.push(tool.name), on: () => undefined };
-		workbenchExtension({ root: tmp, scope: {} as never, gate: {} as never, audit: (() => {}) as never, wikiEnabled: enabled })(pi as never);
+		workbenchExtension({ root: tmp, scope: { wiki: enabled } as never, gate: {} as never, audit: (() => {}) as never })(pi as never);
 		return names;
 	};
 	assert.ok(!register(false).includes("wiki"));
 	assert.ok(register(true).includes("wiki"));
 });
 
+test("opt-in da wiki faz parte do escopo e aparece na descrição", () => {
+	const on = { kbAi: { wiki: true } };
+	assert.equal(resolveScope("read-only", {}).wiki, false);
+	assert.equal(resolveScope("read-only", on).wiki, true);
+	assert.equal(stepScope(STEPS.review, {}).wiki, false);
+	assert.equal(stepScope(STEPS.review, on).wiki, true);
+	assert.match(describeScope(resolveScope("read-only", on), []), /Wiki \(kb-ai\): consulta só leitura/);
+	assert.match(describeScope(resolveScope("read-only", {}), []), /Wiki \(kb-ai\): desabilitada/);
+});
+
 test("decideToolCall só permite wiki com opt-in", () => {
 	const calls: unknown[] = [];
 	const gate = { decide: (...args: unknown[]) => { calls.push(args); return args[2] ? undefined : { block: true, reason: "denied" }; } };
-	const options = { root: tmp, scope: {} as never, gate: gate as never, audit: (() => {}) as never };
+	const options = { root: tmp, scope: { wiki: false } as never, gate: gate as never, audit: (() => {}) as never };
 	assert.deepEqual(decideToolCall("wiki", { action: "search" }, options), { block: true, reason: "denied" });
-	assert.equal(decideToolCall("wiki", { action: "search" }, { ...options, wikiEnabled: true }), undefined);
+	assert.equal(decideToolCall("wiki", { action: "search" }, { ...options, scope: { wiki: true } as never }), undefined);
 	assert.equal(calls.length, 2);
 });
 
