@@ -69,7 +69,7 @@ export const TOOLS: readonly ToolSpec[] = [
 			askUser
 				? "Perguntas ao usuário: pela ferramenta ask_user, uma por chamada."
 				: interactive === undefined
-					? "Perguntas ao usuário: pela ferramenta ask_user quando o wb roda num terminal interativo."
+					? "Perguntas ao usuário: pela ferramenta ask_user quando o wb roda num terminal interativo (sem --no-input)."
 					: "Perguntas ao usuário: nenhuma (não há usuário para responder).",
 		decide: (_tool, _input, target, { askUser }, gate) =>
 			askUser ? gate.decide("ask_user", target, true) : gate.decide("ask_user", target, false, "sem usuário para responder", "rule"),

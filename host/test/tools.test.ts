@@ -71,7 +71,8 @@ test("a extensão registra só as ferramentas próprias habilitadas", () => {
 
 test("wb scope, sem execução, diz que ask_user depende de terminal interativo", () => {
 	const scope = resolveScope("read-only", {});
-	assert.match(describeScope(scope, []), /ask_user quando o wb roda num terminal interativo/);
+	assert.match(describeScope(scope, []), /ask_user quando o wb roda num terminal interativo \(sem --no-input\)/);
+	assert.match(describeScope(scope, []), /num terminal interativo \(sem --no-input\), o host pergunta/);
 	assert.match(describeScope(scope, [], false), /Perguntas ao usuário: nenhuma/);
 });
 

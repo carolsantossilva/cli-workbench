@@ -108,8 +108,10 @@ export function describeScope(scope: EffectiveScope, commands: DetectedCommand[]
 		p.description,
 		...TOOLS.map((t) => t.describe(ctx, commands)),
 		`Sempre negado: ${scope.deny.join(", ")}`,
-		interactive
-			? "Se a tarefa exigir ler ou escrever um arquivo fora desse escopo, faça a chamada mesmo assim: o host pergunta ao usuário, que pode liberar ou negar. Arquivos sensíveis, caminhos fora da raiz, .git e a configuração da Workbench nunca são liberados. Se uma chamada for negada, não tente contornar: siga sem ela e diga no resumo final o que faltou."
+		interactive === undefined
+			? "Fora desse escopo: num terminal interativo (sem --no-input), o host pergunta ao usuário antes de cada leitura ou escrita, inclusive escritas no read-only; sem terminal, bloqueia. Arquivos sensíveis, caminhos fora da raiz (exceto a wiki, pela ferramenta wiki, quando habilitada), .git e a configuração da Workbench nunca são liberados."
+			: interactive
+			? "Se a tarefa exigir ler ou escrever um arquivo fora desse escopo, faça a chamada mesmo assim: o host pergunta ao usuário, que pode liberar ou negar. Arquivos sensíveis, caminhos fora da raiz (exceto a wiki, pela ferramenta wiki, quando habilitada), .git e a configuração da Workbench nunca são liberados. Se uma chamada for negada, não tente contornar: siga sem ela e diga no resumo final o que faltou."
 			: "Chamadas fora desse escopo são bloqueadas pelo host. Não tente contornar o bloqueio: se precisar de algo bloqueado, diga no resumo final o que faltou e por quê.",
 		"Ao terminar, escreva um resumo curto em português: o que fez, arquivos alterados e o que ficou pendente.",
 	].join("\n");
